@@ -1,11 +1,12 @@
 import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 
+from app.core.config import AUTO_DELETE_ON_DOWNLOAD
 from app.services.downloader import DownloadManager
 from app.models.schemas import InfoRequest, DownloadRequest
-from app.utils.sanitizer import build_content_disposition_header, sanitize_filename
+from app.utils.sanitizer import build_content_disposition_header
 
 router = APIRouter(prefix="/api", tags=["Media"])
 
@@ -25,7 +26,7 @@ def fetch_info(req: InfoRequest):
 @router.post("/download")
 def start_download(req: DownloadRequest):
     """
-    Spawns an asynchronous background download & conversion worker.
+    Spawns an asynchronous background download & conversion worker within a bounded thread pool.
     """
     if not req.url or not req.url.strip():
         raise HTTPException(status_code=400, detail="URL cannot be empty")
@@ -53,13 +54,18 @@ def check_status(task_id: str):
 
 @router.get("/file/{task_id}")
 @router.get("/file/{task_id}/{requested_filename}")
-def download_file(task_id: str, requested_filename: Optional[str] = None):
+def download_file(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    requested_filename: Optional[str] = None
+):
     """
-    Serves the downloaded audio file with strict dual Content-Disposition headers for guaranteed filename preservation.
+    Serves the audio file with dual Content-Disposition headers and automatically
+    deletes the physical file immediately after client delivery to guarantee zero disk accumulation.
     """
     filepath = DownloadManager.get_task_filepath(task_id)
     if not filepath or not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Audio file not found or expired")
+        raise HTTPException(status_code=404, detail="Audio file not found or already cleaned up from server.")
     
     actual_filename = os.path.basename(filepath)
     if f"{task_id}_" in actual_filename:
@@ -69,6 +75,10 @@ def download_file(task_id: str, requested_filename: Optional[str] = None):
     ext = os.path.splitext(actual_filename)[1].lower() or ".mp3"
     
     content_disposition, media_type = build_content_disposition_header(final_filename, ext)
+
+    # Schedule immediate post-delivery disk purge
+    if AUTO_DELETE_ON_DOWNLOAD:
+        background_tasks.add_task(DownloadManager.delete_task_file_safely, task_id, 3.0)
 
     return FileResponse(
         path=filepath,
@@ -87,10 +97,18 @@ def stream_audio(task_id: str):
     """
     filepath = DownloadManager.get_task_filepath(task_id)
     if not filepath or not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Audio file not found")
+        raise HTTPException(status_code=404, detail="Audio file not found or expired.")
     
     filename = os.path.basename(filepath)
     ext = os.path.splitext(filename)[1].lower()
     media_type = "audio/mpeg" if ext == ".mp3" else ("audio/mp4" if ext == ".m4a" else "audio/webm")
 
     return FileResponse(path=filepath, media_type=media_type)
+
+@router.delete("/file/{task_id}")
+def delete_file_explicitly(task_id: str):
+    """
+    Allows clients to explicitly trigger immediate file cleanup.
+    """
+    DownloadManager.delete_task_file_safely(task_id, delay_seconds=0.0)
+    return {"success": True, "message": f"File cleanup initiated for {task_id}"}

@@ -103,13 +103,16 @@ sequenceDiagram
     YTDLP->>FS: Writes task_id_TrackName.mp3
     Downloader->>Downloader: Mark status = "completed", filepath, filesize
 
-    %% 5. File Retrieval Phase
+    %% 5. File Retrieval & Auto-Purge Phase
     Frontend->>Frontend: Detects status == "completed", triggers confetti
     User->>Frontend: Clicks "Save MP3 File"
     Frontend->>API: GET /api/file/{task_id}/{filename}
     API->>FS: Reads audio file
     API-->>Frontend: Streaming FileResponse (Content-Disposition: attachment; filename="TrackName.mp3")
-    Frontend-->>User: Browser saves "TrackName.mp3" to Downloads
+    Frontend-->>User: Browser saves "TrackName.mp3" to client Downloads folder
+    Note over API,FS: FastAPI BackgroundTasks immediately purges file from server disk!
+    API->>Downloader: delete_task_file_safely(task_id)
+    Downloader->>FS: os.remove(task_id_TrackName.mp3) (Server disk space reclaimed)
 ```
 
 ---

@@ -4,12 +4,19 @@ import time
 import uuid
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional
 import yt_dlp
 
-from app.core.config import DOWNLOADS_DIR, MAX_FILE_AGE_SECONDS, DEFAULT_BITRATE
+from app.core.config import (
+    DOWNLOADS_DIR,
+    MAX_FILE_AGE_SECONDS,
+    DEFAULT_BITRATE,
+    MAX_CONCURRENT_DOWNLOADS,
+    MAX_TASK_HISTORY,
+    CLEANUP_INTERVAL_SECONDS
+)
 from app.utils.ffmpeg_helper import get_ffmpeg_path
-from app.utils.sanitizer import sanitize_filename
 from app.services.spotify_resolver import (
     is_spotify_url,
     parse_spotify_type_and_id,
@@ -19,24 +26,67 @@ from app.services.spotify_resolver import (
 
 logger = logging.getLogger("downloader")
 
+# In-memory store for task states with thread lock
 tasks: Dict[str, Dict[str, Any]] = {}
 tasks_lock = threading.Lock()
 
-def cleanup_old_files(max_age_seconds: int = MAX_FILE_AGE_SECONDS):
-    """Clean up files and tasks older than the configured threshold"""
+# Bounded thread pool executor for controlled server load
+executor = ThreadPoolExecutor(
+    max_workers=MAX_CONCURRENT_DOWNLOADS,
+    thread_name_prefix="TuneFetch-Worker"
+)
+
+def sweep_storage_and_memory():
+    """
+    Periodic routine to purge expired files and prevent task memory leaks.
+    """
     now = time.time()
+    # 1. Sweep physical disk files
     try:
         for fname in os.listdir(DOWNLOADS_DIR):
+            if fname == ".gitkeep":
+                continue
             fpath = os.path.join(DOWNLOADS_DIR, fname)
-            if os.path.isfile(fpath) and fname != ".gitkeep":
-                if (now - os.path.getmtime(fpath)) > max_age_seconds:
+            if os.path.isfile(fpath):
+                file_age = now - os.path.getmtime(fpath)
+                if file_age > MAX_FILE_AGE_SECONDS:
                     try:
                         os.remove(fpath)
-                        logger.info(f"Cleaned up expired file: {fname}")
+                        logger.info(f"[GC] Removed expired audio file: {fname} (age: {int(file_age)}s)")
                     except Exception as e:
-                        logger.warning(f"Error removing file {fname}: {e}")
+                        logger.warning(f"[GC] Error removing expired file {fname}: {e}")
     except Exception as e:
-        logger.warning(f"Cleanup routine error: {e}")
+        logger.warning(f"[GC] Error during file sweep: {e}")
+
+    # 2. Prune old in-memory task records
+    with tasks_lock:
+        if len(tasks) > MAX_TASK_HISTORY:
+            # Sort by creation time and keep only newest
+            sorted_tasks = sorted(tasks.items(), key=lambda x: x[1].get("created_at", 0))
+            to_remove = len(tasks) - MAX_TASK_HISTORY
+            for k, _ in sorted_tasks[:to_remove]:
+                del tasks[k]
+
+        # Also remove tasks older than 15 minutes that are finished
+        expired_keys = [
+            k for k, v in tasks.items()
+            if (now - v.get("created_at", 0)) > 900 and v.get("status") in ["completed", "error"]
+        ]
+        for k in expired_keys:
+            del tasks[k]
+
+def _background_gc_loop():
+    """Continuous daemon loop for background cleanup."""
+    while True:
+        try:
+            time.sleep(CLEANUP_INTERVAL_SECONDS)
+            sweep_storage_and_memory()
+        except Exception as e:
+            logger.error(f"Unexpected GC thread error: {e}")
+
+# Start the Garbage Collector Daemon Thread
+gc_thread = threading.Thread(target=_background_gc_loop, daemon=True, name="TuneFetch-GC")
+gc_thread.start()
 
 class DownloadManager:
     @staticmethod
@@ -151,7 +201,7 @@ class DownloadManager:
         custom_thumbnail: Optional[str] = None,
     ) -> str:
         """
-        Initializes an asynchronous download task and returns the tracking task ID.
+        Initializes an asynchronous download task queued in the bounded thread pool.
         """
         task_id = str(uuid.uuid4())
         
@@ -159,10 +209,10 @@ class DownloadManager:
             tasks[task_id] = {
                 "id": task_id,
                 "url": url,
-                "title": custom_title or "Preparing download...",
+                "title": custom_title or "Queued for download...",
                 "artist": custom_artist or "",
                 "thumbnail": custom_thumbnail or "",
-                "status": "pending",
+                "status": "queued",
                 "progress": 0.0,
                 "speed": "0 KB/s",
                 "eta": "--",
@@ -174,12 +224,11 @@ class DownloadManager:
                 "created_at": time.time()
             }
 
-        thread = threading.Thread(
-            target=DownloadManager._run_download,
-            args=(task_id, url, format_type, custom_title, custom_artist),
-            daemon=True
+        # Submit task to the bounded worker pool (prevents CPU overload on 1000s of requests)
+        executor.submit(
+            DownloadManager._run_download,
+            task_id, url, format_type, custom_title, custom_artist
         )
-        thread.start()
 
         return task_id
 
@@ -191,8 +240,6 @@ class DownloadManager:
         custom_title: Optional[str],
         custom_artist: Optional[str]
     ):
-        cleanup_old_files()
-        
         target_url = url
         if is_spotify_url(url):
             try:
@@ -337,3 +384,31 @@ class DownloadManager:
             return matching_files[0]
             
         return None
+
+    @staticmethod
+    def delete_task_file_safely(task_id: str, delay_seconds: float = 2.0):
+        """
+        Deletes the downloaded physical file immediately after client delivery,
+        ensuring zero persistent server disk accumulation.
+        """
+        def _deferred_delete():
+            time.sleep(delay_seconds)
+            try:
+                filepath = DownloadManager.get_task_filepath(task_id)
+                if filepath and os.path.exists(filepath):
+                    os.remove(filepath)
+                    logger.info(f"[AutoClean] Successfully deleted served file: {os.path.basename(filepath)}")
+                
+                # Also remove any matching partial files for this task_id
+                for f in glob.glob(os.path.join(DOWNLOADS_DIR, f"{task_id}_*")):
+                    try:
+                        if os.path.exists(f):
+                            os.remove(f)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(f"[AutoClean] Error during deferred deletion for task {task_id}: {e}")
+
+        # Run deletion in a detached background thread after a brief response delivery window
+        cleanup_worker = threading.Thread(target=_deferred_delete, daemon=True)
+        cleanup_worker.start()

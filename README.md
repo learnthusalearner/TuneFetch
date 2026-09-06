@@ -22,6 +22,9 @@ TuneFetch seamlessly downloads audio streams from **YouTube, YouTube Music, Spot
 
 ## ✨ Key Features
 
+- 🧹 **Zero-Disk-Accumulation Architecture**: Once a user downloads an audio file, it is automatically purged from the server via FastAPI `BackgroundTasks` to guarantee zero persistent server disk usage.
+- ⚡ **High-Throughput Concurrency Throttling**: Employs a bounded worker pool (`ThreadPoolExecutor`) to smoothly handle thousands of concurrent download requests without CPU, bandwidth, or memory exhaustion.
+- 🔄 **Continuous Background Garbage Collector (GC)**: An autonomous background daemon sweeps temporary files and purges abandoned or un-downloaded files older than 5 minutes.
 - 🚀 **Asynchronous Audio Pipeline**: Non-blocking download and post-processing workers managed with thread-safe task pools.
 - 🛠️ **Embedded FFmpeg Engine**: Powered by `imageio-ffmpeg` to ensure zero-configuration MP3 conversion on Windows and cross-platform systems without requiring global PATH edits.
 - 🟢 **Spotify Track & Playlist Resolution**: Automatically resolves Spotify metadata (track names, artists, album artwork) via Spotify oEmbed and lightweight scrapers, seamlessly querying `ytsearch` to find and extract the highest-quality audio match.

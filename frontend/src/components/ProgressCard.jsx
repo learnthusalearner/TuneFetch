@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { formatFileSize, sanitizeClientFilename } from '../utils/formatters';
 
 export default function ProgressCard({ task, onPlayAudio }) {
+  const [hasDownloaded, setHasDownloaded] = React.useState(false);
   if (!task) return null;
 
   const isCompleted = task.status === 'completed';
@@ -38,6 +39,7 @@ export default function ProgressCard({ task, onPlayAudio }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setHasDownloaded(true);
   };
 
   return (
@@ -128,10 +130,14 @@ export default function ProgressCard({ task, onPlayAudio }) {
             <button
               className="btn-download-action"
               onClick={handleDirectDownload}
-              style={{ padding: '10px 20px', fontSize: '14px' }}
+              style={{
+                padding: '10px 20px',
+                fontSize: '14px',
+                background: hasDownloaded ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : undefined
+              }}
             >
-              <Download size={16} />
-              <span>Save MP3 File</span>
+              {hasDownloaded ? <CheckCircle2 size={16} /> : <Download size={16} />}
+              <span>{hasDownloaded ? 'Downloaded to Device' : 'Save MP3 File'}</span>
             </button>
           </div>
         </div>
