@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+backend/venv/
+venv/
+.venv/
+env/
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/*.mp3
+downloads/*.m4a
+downloads/*.webm
+downloads/*.opus
+downloads/*.wav
+backend/downloads/*
+!backend/downloads/.gitkeep
+
+# Frontend build & cache
+frontend/dist/
+frontend/dist-ssr/
+*.local
+.env
+.env.*.local
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+.gemini/
