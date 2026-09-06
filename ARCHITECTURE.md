@@ -8,14 +8,14 @@ This document provides an exhaustive reference of the architecture, file structu
 
 ```mermaid
 graph TD
-    subgraph Client ["Frontend (React + Vite)"]
-        UI[App.jsx & UI Components]
-        Hooks[useDownloadTask & useLocalStorage]
+    subgraph Client ["Frontend: React and Vite"]
+        UI[App.jsx and UI Components]
+        Hooks[useDownloadTask and useLocalStorage]
         APIClient[services/api.js]
         Formatters[utils/formatters.js]
     end
 
-    subgraph Server ["Backend (FastAPI Engine)"]
+    subgraph Server ["Backend: FastAPI Engine"]
         Main[app/main.py]
         RouterMedia[routes/media.py]
         RouterHealth[routes/health.py]
@@ -27,10 +27,10 @@ graph TD
         Sanitizer[utils/sanitizer.py]
     end
 
-    subgraph External ["External Services & Tools"]
+    subgraph External ["External Services and Binaries"]
         YTDLP[yt-dlp Engine]
         ImageIO[imageio-ffmpeg Binary]
-        SpotifyEmbed[Spotify oEmbed / Embed]
+        SpotifyEmbed[Spotify oEmbed and Embed]
         YouTube[YouTube Media CDN]
     end
 
@@ -61,58 +61,58 @@ graph TD
 sequenceDiagram
     autonumber
     actor User
-    participant Frontend as React Frontend (App.jsx)
-    participant API as FastAPI Backend (routes/media.py)
-    participant Downloader as DownloadManager (services/downloader.py)
-    participant Spotify as SpotifyResolver (services/spotify_resolver.py)
-    participant YTDLP as yt-dlp / FFmpeg
-    participant FS as File System (backend/downloads/)
+    participant Frontend as React Frontend
+    participant API as FastAPI Backend
+    participant Downloader as DownloadManager
+    participant Spotify as SpotifyResolver
+    participant YTDLP as yt-dlp Engine
+    participant FS as Local File System
 
     %% 1. Metadata Phase
-    User->>Frontend: Pastes Spotify / YouTube URL
-    Frontend->>API: POST /api/info { url }
+    User->>Frontend: Paste Spotify or YouTube URL
+    Frontend->>API: POST /api/info
     alt is Spotify URL
-        API->>Spotify: resolve_spotify_track(url)
-        Spotify-->>API: Metadata + ytsearch query
-    else is YouTube / Direct URL
-        API->>Downloader: extract_info(url, download=False)
+        API->>Spotify: resolve_spotify_track()
+        Spotify-->>API: Metadata and search query
+    else is YouTube or Direct URL
+        API->>Downloader: extract_info()
         Downloader-->>API: Metadata
     end
-    API-->>Frontend: Media metadata payload (title, artist, thumbnail, duration)
-    Frontend-->>User: Renders MediaCard / PlaylistCard preview
+    API-->>Frontend: Return media metadata
+    Frontend-->>User: Render MediaCard preview
 
     %% 2. Download Phase
-    User->>Frontend: Selects bitrate (e.g. 320 kbps) & clicks Download
-    Frontend->>API: POST /api/download { url, format: "mp3-320", ... }
-    API->>Downloader: create_download_task(...)
-    Downloader->>Downloader: Spawns background worker thread
-    Downloader-->>API: task_id (UUID)
-    API-->>Frontend: { success: true, task_id }
+    User->>Frontend: Select bitrate and click Download
+    Frontend->>API: POST /api/download
+    API->>Downloader: create_download_task()
+    Downloader->>Downloader: Submit task to Bounded ThreadPool
+    Downloader-->>API: Return task_id
+    API-->>Frontend: Return task_id
 
     %% 3. Polling & Progress Phase
     loop Every 750ms
         Frontend->>API: GET /api/status/{task_id}
-        API->>Downloader: get_task_status(task_id)
-        Downloader-->>API: { status, progress, speed, eta }
-        API-->>Frontend: Task Status JSON
-        Frontend-->>User: Updates animated progress bar
+        API->>Downloader: get_task_status()
+        Downloader-->>API: Progress percentage, speed, and ETA
+        API-->>Frontend: Task status JSON
+        Frontend-->>User: Update progress bar animation
     end
 
     %% 4. Execution & Conversion
-    Downloader->>YTDLP: Download audio stream + FFmpegExtractAudio (MP3 320k)
-    YTDLP->>FS: Writes task_id_TrackName.mp3
-    Downloader->>Downloader: Mark status = "completed", filepath, filesize
+    Downloader->>YTDLP: Download audio stream and extract MP3
+    YTDLP->>FS: Write converted MP3 file
+    Downloader->>Downloader: Mark status completed with filename and size
 
     %% 5. File Retrieval & Auto-Purge Phase
-    Frontend->>Frontend: Detects status == "completed", triggers confetti
-    User->>Frontend: Clicks "Save MP3 File"
+    Frontend->>Frontend: Detect status completed and trigger confetti
+    User->>Frontend: Click Save MP3 File
     Frontend->>API: GET /api/file/{task_id}/{filename}
-    API->>FS: Reads audio file
-    API-->>Frontend: Streaming FileResponse (Content-Disposition: attachment; filename="TrackName.mp3")
-    Frontend-->>User: Browser saves "TrackName.mp3" to client Downloads folder
-    Note over API,FS: FastAPI BackgroundTasks immediately purges file from server disk!
-    API->>Downloader: delete_task_file_safely(task_id)
-    Downloader->>FS: os.remove(task_id_TrackName.mp3) (Server disk space reclaimed)
+    API->>FS: Read audio file
+    API-->>Frontend: Stream audio FileResponse with attachment header
+    Frontend-->>User: Browser saves MP3 file to client disk
+    Note over API,FS: FastAPI BackgroundTasks purges file from server disk
+    API->>Downloader: delete_task_file_safely()
+    Downloader->>FS: Delete physical file from server storage
 ```
 
 ---
