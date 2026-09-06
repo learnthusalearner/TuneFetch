@@ -280,12 +280,7 @@ TuneFetch/
 │   ├── package.json
 │   ├── vite.config.js               # Proxy setup (/api, /spotify -> backend:8000)
 │   └── index.html
-│
-├── docs/
-│   ├── ARCHITECTURE.md              # Comprehensive architectural specification
-│   ├── run.md                       # Complete run & setup walkthrough
-│   └── spotify-integration.md       # Spotify OAuth & Playlist Architecture Guide
-└── README.md                        # Merged master documentation
+└── README.md                        # Master documentation (merged architecture, setup & API)
 ```
 
 ### Backend Layer (`backend/app/`)
