@@ -1,6 +1,6 @@
 # 🎵 Spotify OAuth & Playlist Integration Guide
 
-This guide explains the architecture, security model, environment configuration, and end-to-end operational pipeline of the Spotify OAuth integration in **TuneFetch**.
+This guide explains the architecture, security model, environment configuration, database caching, and end-to-end operational pipeline of the Spotify OAuth integration in **TuneFetch**.
 
 ---
 
@@ -11,16 +11,18 @@ This guide explains the architecture, security model, environment configuration,
 4. [Authentication & Multi-User Isolation (PKCE)](#authentication--multi-user-isolation-pkce)
 5. [Token Encryption at Rest (PostgreSQL & Fernet)](#token-encryption-at-rest-postgresql--fernet)
 6. [Playlist Extraction & Large Playlist Pagination (1,400+ Tracks)](#playlist-extraction--large-playlist-pagination-1400-tracks)
-7. [Serper Candidate URL Resolution](#serper-candidate-url-resolution)
-8. [Handoff to Existing yt-dlp Downloader Pipeline](#handoff-to-existing-yt-dlp-downloader-pipeline)
-9. [API Endpoints Reference](#api-endpoints-reference)
-10. [Troubleshooting & Gotchas](#troubleshooting--gotchas)
+7. [Global PostgreSQL Song Resolution Cache (`ResolvedSong`)](#global-postgresql-song-resolution-cache-resolvedsong)
+8. [Serper Candidate URL Resolution & Fallback](#serper-candidate-url-resolution--fallback)
+9. [Handoff to Existing yt-dlp Downloader Pipeline](#handoff-to-existing-yt-dlp-downloader-pipeline)
+10. [Direct PC Folder Saving (File System Access API)](#direct-pc-folder-saving-file-system-access-api)
+11. [API Endpoints Reference](#api-endpoints-reference)
+12. [Troubleshooting & Gotchas](#troubleshooting--gotchas)
 
 ---
 
 ## 1. Architecture Overview
 
-TuneFetch places the Spotify Web API and candidate search resolution **upstream** of the existing, unmodified `yt-dlp` download engine:
+TuneFetch places the Spotify Web API, multi-user isolation, database resolution cache, and candidate search resolution **upstream** of the existing, unmodified `yt-dlp` download engine:
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -41,19 +43,32 @@ TuneFetch places the Spotify Web API and candidate search resolution **upstream*
                                      |  Encrypted Tokens|       | (Background Task) |
                                      +------------------+       +-------------------+
                                                                           |
-                                                                          | 5. Iterate tracks
+                                                                          | 5. Check cache first
                                                                           v
                                                                 +-------------------+
-                                                                |   Serper API      |
-                                                                | (Candidate Search)|
-                                                                +-------------------+
+                                                                |   ResolvedSong    |  Cache Hit (<5ms)
+                                                                |   (Neon DB Table) | ==================> [ Candidate URL ]
+                                                                +-------------------+                          |
+                                                                          | Cache Miss                         |
+                                                                          v                                    |
+                                                                +-------------------+                          |
+                                                                |   Serper API      |                          |
+                                                                | (Candidate Search)| -------------------------+
+                                                                +-------------------+                          |
+                                                                          |                                    |
+                                                                          | 6. Resolved candidate URL         |
+                                                                          v                                    v
+                                                                +--------------------------------------------------+
+                                                                |            UNMODIFIED yt-dlp Engine              |
+                                                                |                 DownloadManager                  |
+                                                                +--------------------------------------------------+
                                                                           |
-                                                                          | 6. Resolved candidate URL
+                                                                          | 7. Archive & Direct Folder Save
                                                                           v
-                                                                +-------------------+
-                                                                | UNMODIFIED yt-dlp |
-                                                                | DownloadManager   |
-                                                                +-------------------+
+                                                                +--------------------------------------------------+
+                                                                |    Direct PC Folder Delivery (folderSaver.js)    |
+                                                                |   window.showDirectoryPicker() -> /Thanks_...    |
+                                                                +--------------------------------------------------+
 ```
 
 ---
@@ -84,7 +99,7 @@ In `backend/.env` (and root `.env.example`), configure the following variables:
 
 ```ini
 # PostgreSQL (Neon Database URL)
-DATABASE_URL=postgresql://neondb_owner:npg_Ft4NsXkSvh5f@ep-jolly-truth-avnf7grx-pooler.c-11.us-east-1.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://neondb_owner:your_password@your-neon-endpoint.us-east-1.aws.neon.tech/neondb?sslmode=require
 
 # Encryption Key for Spotify Tokens (Fernet 32-byte urlsafe base64)
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -139,8 +154,8 @@ Spotify access tokens and refresh tokens are **never stored as raw plaintext in 
 
 - Tokens are encrypted using symmetric authenticated cryptography (**AES-128-CBC with HMAC-SHA256 via Fernet**).
 - When Spotify API calls are made, the service automatically checks if the `access_token` has expired:
-  - If expired or expiring within 60 seconds, the `refresh_token` is decrypted and sent to `https://accounts.spotify.com/api/token`.
-  - The newly received access token is re-encrypted with Fernet and updated in PostgreSQL.
+   - If expired or expiring within 60 seconds, the `refresh_token` is decrypted and sent to `https://accounts.spotify.com/api/token`.
+   - The newly received access token is re-encrypted with Fernet and updated in PostgreSQL.
 
 ---
 
@@ -171,9 +186,25 @@ while next_url:
 
 ---
 
-## 7. Serper Candidate URL Resolution
+## 7. Global PostgreSQL Song Resolution Cache (`ResolvedSong`)
 
-Once track names and artists are extracted, `SerperService` resolves each song to a playable candidate audio stream URL.
+When downloading music, popular songs are downloaded repeatedly across different users. To prevent redundant external search calls and minimize API quota usage:
+
+1. **Global Cache Table**: The database includes a `resolved_songs` table:
+   - `song_name_clean`: Lowercase, whitespace-normalized track title.
+   - `artist_name_clean`: Lowercase, whitespace-normalized primary artist.
+   - `candidate_url`: The verified playable YouTube / audio stream URL.
+   - `source`: `'serper'`, `'cache'`, or `'fallback'`.
+2. **Lookup Prior to External Search**:
+   - Before calling Serper or YouTube search, `playlist_pipeline.py` checks `db.query(ResolvedSong).filter_by(...)`.
+   - **Cache Hit**: Returns the cached `candidate_url` in `< 5ms` with zero external network overhead or API cost.
+   - **Cache Miss**: Calls `SerperService` to locate the candidate URL, then stores the result in `resolved_songs` for all future requests.
+
+---
+
+## 8. Serper Candidate URL Resolution & Fallback
+
+Once track names and artists are extracted (and after cache check):
 
 1. Builds precise search query: `"{Title} {Artists} audio"`
 2. Queries the **Serper API** (`https://google.serper.dev/videos` or `https://google.serper.dev/search`).
@@ -182,7 +213,7 @@ Once track names and artists are extracted, `SerperService` resolves each song t
 
 ---
 
-## 8. Handoff to Existing yt-dlp Downloader Pipeline
+## 9. Handoff to Existing yt-dlp Downloader Pipeline
 
 TuneFetch **preserves and reuses the existing download infrastructure without modification**.
 
@@ -205,7 +236,18 @@ The pipeline:
 
 ---
 
-## 9. API Endpoints Reference
+## 10. Direct PC Folder Saving (File System Access API)
+
+Rather than forcing users to download a compressed archive file and manually unzip it, TuneFetch provides direct PC folder delivery via the browser's native File System Access API (`window.showDirectoryPicker()`):
+
+1. **User Folder Picker**: When the user clicks **"Save Playlist to Folder"**, the browser prompts the user to select their desired destination directory (e.g., `C:\Users\...\Music`).
+2. **Directory Creation**: The utility (`frontend/src/utils/folderSaver.js`) creates a dedicated directory named `Thanks_for_downloading` inside the chosen location.
+3. **In-Memory Unpack**: The client fetches the playlist ZIP stream from `/spotify/jobs/{job_id}/archive`, parses it using `JSZip`, and writes each audio file with its sanitized name (`{Artist} - {Song Title}.mp3`) directly onto disk.
+4. **Fallback Handling**: If the browser does not support the File System Access API, it falls back to a direct standard file download.
+
+---
+
+## 11. API Endpoints Reference
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
@@ -217,10 +259,11 @@ The pipeline:
 | `/spotify/playlists/{id}/tracks` | `GET` | Returns full list of tracks for a playlist with pagination. |
 | `/spotify/playlists/{id}/download` | `POST` | Starts a background batch download job for the playlist. |
 | `/spotify/jobs/{job_id}` | `GET` | Returns real-time progress and logs for a batch download job. |
+| `/spotify/jobs/{job_id}/archive` | `GET` | Streams a ZIP archive of all completed MP3 files for direct folder saving. |
 
 ---
 
-## 10. Troubleshooting & Gotchas
+## 12. Troubleshooting & Gotchas
 
 1. **`INVALID_CLIENT: Invalid redirect URI`**:
    - Ensure `http://localhost:8000/spotify/callback` is added word-for-word in the Spotify Developer Dashboard App settings under **Redirect URIs**.

@@ -1,4 +1,4 @@
-# 🎧 TuneFetch - High-Fidelity Audio, MP3 & Spotify Playlist Extractor
+# 🎧 TuneFetch - High-Fidelity Spotify Playlist & Audio Extractor
 
 <p align="center">
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
@@ -18,25 +18,26 @@
 
 **TuneFetch** is an audio extraction, conversion, and Spotify playlist downloading platform. It features an asynchronous **Python (FastAPI + `yt-dlp`)** backend engine, **Neon PostgreSQL** with Fernet token encryption for multi-user Spotify OAuth, and a modern, responsive **React (Vite)** frontend with dark glassmorphism styling.
 
-TuneFetch seamlessly handles:
-1. **Direct Single Tracks & Playlists**: Direct extraction from YouTube, YouTube Music, SoundCloud, and web media.
-2. **Spotify OAuth & Batch Playlist Downloader**: Connects your Spotify account via OAuth 2.0 PKCE, retrieves public, private, and collaborative playlists (supporting 10, 100, 500, 1,400+ songs with full pagination), resolves tracks to high-fidelity audio streams via Serper Google Video search, and queues them through the high-throughput `yt-dlp` download engine.
+TuneFetch connects directly with Spotify via OAuth 2.0 PKCE, retrieves public, private, and collaborative playlists (supporting 10, 100, 500, 1,400+ songs with full pagination), resolves tracks to high-fidelity audio streams via Serper Google Video search, and queues them through the high-throughput `yt-dlp` download engine.
+
+Once converted, playlists can be saved **directly into a real Windows folder on your PC** (`Thanks_for_downloading`) containing all `{Artist} - {Song Title}.mp3` files, eliminating the need to manually unzip archives!
 
 ---
 
 ## ✨ Key Features
 
 - 🟢 **Spotify OAuth 2.0 with PKCE**: Full multi-user authorization flow allowing users to inspect and download their own private, collaborative, and public Spotify playlists.
-- 🐘 **Neon PostgreSQL & Encrypted Tokens**: User sessions and Spotify tokens stored securely with symmetric authenticated encryption (**Fernet AES-128-CBC + HMAC-SHA256**) at rest.
+- 📁 **Direct Windows Folder Saving on PC**: Leverages the browser's native **File System Access API (`window.showDirectoryPicker`)** and **JSZip** to unpack all MP3 songs directly into a local Windows folder (`Thanks_for_downloading`) on your computer.
+- 🐘 **Neon PostgreSQL Global Caching (`resolved_songs`)**: Every song URL discovered is permanently cached in PostgreSQL, matching by both cleaned `song_name` and `artist_name`. Repeated downloads across any user completely bypass Serper API calls.
+- ⏱️ **Live ETA Countdown & Job Persistence**: Calculates real-time completion countdown. Users can close the page, do other tasks, and return later; the session automatically reconnects to their active or completed folder.
 - 📜 **Full Pagination Engine**: Effortlessly extracts playlists containing **10, 100, 500, or 1,400+ tracks** without memory bottlenecks or missing tracks.
 - 🔍 **Serper Candidate Resolution**: Automated high-speed search resolution using Serper API (`Song + Artist audio`) to find the best candidate audio stream, with seamless `ytsearch1:` fallback.
 - 🛡️ **Zero-Disk-Accumulation Architecture**: Once a user downloads an audio file, it is automatically purged from the server via FastAPI `BackgroundTasks` to guarantee zero persistent server disk usage.
-- ⚡ **High-Throughput Concurrency Throttling**: Employs a bounded worker pool (`ThreadPoolExecutor`) to smoothly handle thousands of concurrent download requests without CPU, bandwidth, or memory exhaustion.
-- 🔄 **Continuous Background Garbage Collector (GC)**: An autonomous background daemon sweeps temporary files and purges abandoned or un-downloaded files older than 5 minutes.
+- ⚡ **High-Throughput Concurrency Throttling**: Employs a bounded worker pool (`ThreadPoolExecutor`) to smoothly handle concurrent download requests without CPU, bandwidth, or memory exhaustion.
+- 🔄 **Continuous Background Garbage Collector (GC)**: An autonomous background daemon sweeps temporary files and purges abandoned or un-downloaded files older than 2 hours.
 - 🛠️ **Embedded FFmpeg Engine**: Powered by `imageio-ffmpeg` to ensure zero-configuration MP3 conversion on Windows and cross-platform systems without requiring global PATH edits.
-- 📊 **Real-Time Batch Progress Tracking**: Live dashboard monitoring batch jobs with percentage progress, active song status, success/failure counts, and in-browser playback.
-- 🎵 **Built-in HTML5 Audio Preview**: Play and scrub through downloaded audio files in the browser before or after saving them to disk.
-- 💾 **Safe Named File Downloads**: Dual standard `Content-Disposition` headers guaranteeing proper `Artist - Title.mp3` file naming across all browsers.
+- 🐍 **Automatic Venv Detection (`run.py`)**: Automatically detects and executes inside the project's virtual environment even if executed from global Python.
+- 💾 **Reliable Named File Downloads**: Dual standard `Content-Disposition` headers and in-memory blob triggers guarantee proper `Artist - Title.mp3` file naming across all browsers without bare UUID downloads.
 
 ---
 
@@ -50,18 +51,18 @@ TuneFetch/
 │   │   │   ├── config.py            # Global settings, DB connection string, secrets
 │   │   │   └── database.py          # SQLAlchemy engine, session maker & init_db
 │   │   ├── models/
-│   │   │   ├── db_models.py         # User, SpotifyAccount, PlaylistDownloadJob
+│   │   │   ├── db_models.py         # User, SpotifyAccount, PlaylistDownloadJob, ResolvedSong
 │   │   │   └── schemas.py           # Pydantic schemas for data validation
 │   │   ├── routes/
 │   │   │   ├── health.py            # /api/health endpoint
-│   │   │   ├── media.py             # /api/info, /api/download, /api/file, /api/stream
-│   │   │   └── spotify.py           # /spotify/auth, /callback, /playlists, /download
+│   │   │   ├── media.py             # /api/file, /api/stream, /api/status
+│   │   │   └── spotify.py           # /spotify/auth, /callback, /playlists, /download, /jobs
 │   │   ├── services/
-│   │   │   ├── downloader.py        # UNTOUCHED core yt-dlp download engine
+│   │   │   ├── downloader.py        # Core yt-dlp download engine
 │   │   │   ├── spotify_service.py   # PKCE OAuth, token refresh & 1,400+ track pagination
-│   │   │   ├── serper_service.py    # Serper candidate search & ytsearch fallback
+│   │   │   ├── serper_service.py    # Serper candidate search & DB caching
 │   │   │   ├── playlist_pipeline.py # Background batch worker bridging Spotify -> yt-dlp
-│   │   │   └── spotify_resolver.py  # Direct single-URL Spotify oEmbed resolver
+│   │   │   └── spotify_resolver.py  # Spotify URL format helpers
 │   │   ├── utils/
 │   │   │   ├── auth_helper.py       # Fernet token encryption & signed session cookies
 │   │   │   ├── ffmpeg_helper.py     # Embedded/system FFmpeg binary locator
@@ -70,25 +71,22 @@ TuneFetch/
 │   │   └── __init__.py
 │   ├── downloads/                   # Temporary directory for converted audio files
 │   ├── tests/
-│   │   └── test_spotify_pipeline.py # Automated test suite for Spotify pipeline
+│   │   └── test_spotify_pipeline.py # 9 automated tests for the full pipeline
 │   ├── requirements.txt             # Python backend dependencies
-│   └── run.py                       # Backend server launcher
+│   └── run.py                       # Backend server launcher with auto-venv detection
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── Header.jsx           # Top navigation bar & backend health badge
-│   │   │   ├── UrlInput.jsx         # Input bar with auto-platform detection & paste
-│   │   │   ├── MediaCard.jsx        # Track preview card & bitrate quality selector
-│   │   │   ├── PlaylistCard.jsx     # Direct URL playlist overview & track downloader
-│   │   │   ├── ProgressCard.jsx     # Animated progress bar & direct file download
+│   │   │   ├── ProgressCard.jsx     # Animated progress bar & single track download
 │   │   │   ├── AudioPlayer.jsx      # In-browser audio player with scrub & volume controls
 │   │   │   ├── HistoryDrawer.jsx    # Download history drawer
 │   │   │   └── Spotify/
-│   │   │       ├── SpotifyConnect.jsx    # Spotify OAuth authorization status badge
-│   │   │       ├── SpotifyPlaylists.jsx  # Grid of user playlists with search filter
-│   │   │       ├── PlaylistTracksModal.jsx # Full tracklist preview & format selector
-│   │   │       └── BatchProgressCard.jsx # Live batch job progress dashboard
+│   │   │       ├── SpotifyConnect.jsx      # Spotify OAuth authorization status card
+│   │   │       ├── SpotifyPlaylists.jsx    # Grid of user playlists with search filter
+│   │   │       ├── PlaylistTracksModal.jsx # Full tracklist preview & batch download
+│   │   │       └── BatchProgressCard.jsx   # Live batch job progress & Save to Folder
 │   │   ├── constants/
 │   │   │   └── index.js             # Formats, platforms, and storage keys
 │   │   ├── hooks/
@@ -97,8 +95,9 @@ TuneFetch/
 │   │   ├── services/
 │   │   │   └── api.js               # API client with Spotify endpoints
 │   │   ├── utils/
+│   │   │   ├── folderSaver.js       # File System Access API direct folder unpacker
 │   │   │   └── formatters.js        # Duration, file size, and timestamp helpers
-│   │   ├── App.jsx                  # Tabbed controller (Direct URL vs Spotify)
+│   │   ├── App.jsx                  # Main application controller
 │   │   ├── index.css                # Dark glassmorphism styling
 │   │   └── main.jsx                 # React root mount
 │   ├── package.json
@@ -106,11 +105,12 @@ TuneFetch/
 │   └── index.html
 │
 ├── docs/
-│   └── spotify-integration.md       # Full Spotify OAuth & Playlist Architecture Guide
+│   ├── ARCHITECTURE.md              # Comprehensive architectural specification
+│   ├── run.md                       # Complete run & setup walkthrough
+│   └── spotify-integration.md       # Spotify OAuth & Playlist Architecture Guide
 ├── start.bat                        # Windows 1-Click Launcher (CMD)
 ├── start.ps1                        # PowerShell 1-Click Launcher
-├── ARCHITECTURE.md                  # Comprehensive architectural specification
-└── README.md                        # Documentation
+└── README.md                        # Project documentation
 ```
 
 ---
@@ -144,11 +144,9 @@ Or run in PowerShell:
 **Backend:**
 ```bash
 cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
 python run.py
 ```
+*(The script automatically detects and runs inside `backend\venv` if present).*
 
 **Frontend:**
 ```bash
@@ -163,10 +161,11 @@ Visit **`http://localhost:5173`** in your browser.
 
 ## 🧪 Testing
 
-Run the automated test suite covering Spotify PKCE, token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, and multi-user isolation:
+Run the automated test suite covering Spotify PKCE, token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, database caching, and multi-user isolation:
 
 ```bash
-backend\venv\Scripts\pytest backend\tests\test_spotify_pipeline.py
+cd backend
+venv\Scripts\pytest tests\test_spotify_pipeline.py
 ```
 
 ---

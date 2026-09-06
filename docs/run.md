@@ -100,7 +100,9 @@ Run `run.py` from the `backend/` directory:
 ```bash
 python run.py
 ```
-*(Alternatively: `uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload`)*
+
+> **⚡ Auto-Venv Detection Feature**:
+> `backend/run.py` features an intelligent virtual environment auto-delegator. If you invoke `python run.py` using global Python while a local `venv` exists, `run.py` automatically detects `backend/venv/Scripts/python.exe` and re-launches itself inside the virtual environment without manual activation required!
 
 The backend server will start at:
 - **API Base URL**: `http://127.0.0.1:8000`
@@ -138,7 +140,7 @@ http://localhost:5173
 
 ## 5. Running Automated Tests
 
-To run the complete automated test suite (testing PKCE generation, Fernet token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, Serper resolution, and multi-user isolation):
+To run the complete automated test suite (testing PKCE generation, Fernet token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, Serper resolution, Neon PostgreSQL caching, and multi-user isolation):
 
 From the project root:
 
@@ -184,6 +186,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
   cd backend
   .\venv\Scripts\Activate.ps1
   ```
+  *(Or simply invoke `python run.py`, which auto-delegates to the venv!)*
 
 ### ❌ Spotify `INVALID_CLIENT: Invalid redirect URI`
 - **Cause**: The redirect URI in Spotify Developer Dashboard does not match `SPOTIFY_REDIRECT_URI`.
