@@ -28,9 +28,19 @@ def get_db():
 def init_db():
     """Initializes all database tables in Neon PostgreSQL."""
     try:
-        # Import models so they register on Base.metadata
         import app.models.db_models  # noqa
         Base.metadata.create_all(bind=engine)
+        
+        # Safely ensure newly added columns exist if table was already created
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_path VARCHAR(512);"))
+                conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_filename VARCHAR(256);"))
+                conn.commit()
+            except Exception as mig_err:
+                logger.debug(f"Column migration check note: {mig_err}")
+
         logger.info("Database schema synchronized with Neon PostgreSQL successfully.")
     except Exception as e:
         logger.error(f"Error during database initialization: {e}", exc_info=True)

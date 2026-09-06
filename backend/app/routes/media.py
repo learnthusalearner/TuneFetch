@@ -71,8 +71,10 @@ def download_file(
     if f"{task_id}_" in actual_filename:
         actual_filename = actual_filename.split(f"{task_id}_", 1)[-1]
         
-    final_filename = requested_filename if (requested_filename and "." in requested_filename) else actual_filename
     ext = os.path.splitext(actual_filename)[1].lower() or ".mp3"
+    final_filename = requested_filename if (requested_filename and "." in requested_filename) else actual_filename
+    if not final_filename.lower().endswith(ext):
+        final_filename = f"{final_filename}{ext}"
     
     content_disposition, media_type = build_content_disposition_header(final_filename, ext)
 
@@ -85,7 +87,6 @@ def download_file(
         filename=final_filename,
         media_type=media_type,
         headers={
-            "Content-Disposition": content_disposition,
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )

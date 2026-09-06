@@ -1,5 +1,7 @@
+import os
 import logging
-from typing import Optional
+import urllib.parse
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -7,16 +9,25 @@ from pydantic import BaseModel
 
 from app.core.config import FRONTEND_URL
 from app.core.database import get_db
-from app.models.db_models import User, SpotifyAccount
-from app.utils.auth_helper import get_current_user
+from app.models.db_models import User, SpotifyAccount, PlaylistDownloadJob
+from app.utils.auth_helper import get_current_user, sign_session_id, SESSION_COOKIE_NAME
 from app.services.spotify_service import SpotifyService
 from app.services.playlist_pipeline import PlaylistPipeline
+from app.services.serper_service import SerperService
+from app.services.downloader import DownloadManager
 
 logger = logging.getLogger("spotify_route")
 
 router = APIRouter(prefix="/spotify", tags=["Spotify"])
 
 class PlaylistDownloadRequest(BaseModel):
+    format: Optional[str] = "mp3-320"
+    track_ids: Optional[List[str]] = None
+
+class SingleTrackDownloadRequest(BaseModel):
+    song_name: str
+    artist_name: str
+    thumbnail: Optional[str] = None
     format: Optional[str] = "mp3-320"
 
 @router.get("/auth")
@@ -31,7 +42,17 @@ def spotify_auth_start(
     """
     auth_url = SpotifyService.create_auth_url(user_id=current_user.id)
     if redirect:
-        return RedirectResponse(url=auth_url)
+        resp = RedirectResponse(url=auth_url)
+        signed_cookie = sign_session_id(current_user.id)
+        resp.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=signed_cookie,
+            httponly=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 365,
+            path="/"
+        )
+        return resp
     return {"success": True, "auth_url": auth_url}
 
 @router.get("/callback")
@@ -47,22 +68,34 @@ async def spotify_auth_callback(
     """
     if error:
         logger.warning(f"Spotify OAuth error received: {error}")
-        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={error}")
+        safe_error = urllib.parse.quote_plus(str(error))
+        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={safe_error}")
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state parameter.")
 
     try:
-        await SpotifyService.exchange_code_for_tokens(
+        account, resolved_user_id = await SpotifyService.exchange_code_for_tokens(
             user_id=current_user.id,
             code=code,
             state=state,
             db=db
         )
-        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify=connected")
+        resp = RedirectResponse(url=f"{FRONTEND_URL}/?spotify=connected")
+        signed_cookie = sign_session_id(resolved_user_id)
+        resp.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=signed_cookie,
+            httponly=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 365,
+            path="/"
+        )
+        return resp
     except Exception as e:
         logger.error(f"Callback token exchange error: {e}")
-        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={str(e)}")
+        safe_error = urllib.parse.quote_plus(str(e))
+        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={safe_error}")
 
 @router.get("/status")
 def get_spotify_status(
@@ -136,9 +169,61 @@ async def trigger_playlist_download(
     job_id = await PlaylistPipeline.create_and_start_job(
         user_id=current_user.id,
         playlist_id=playlist_id,
-        format_type=req.format or "mp3-320"
+        format_type=req.format or "mp3-320",
+        track_ids=req.track_ids
     )
     return {"success": True, "job_id": job_id}
+
+@router.post("/track/download")
+async def download_single_spotify_track(
+    req: SingleTrackDownloadRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Downloads an individual song from a Spotify playlist:
+    1. Checks database cache (matching BOTH song_name and artist_name).
+       If found, Serper API is completely bypassed.
+    2. If not found, calls Serper API and caches resolved candidate in PostgreSQL.
+    3. Initiates single download via existing DownloadManager.
+    """
+    candidate_url = await SerperService.find_best_audio_url(
+        song_name=req.song_name,
+        artists=req.artist_name,
+        db=db
+    )
+    task_id = DownloadManager.create_download_task(
+        url=candidate_url,
+        format_type=req.format or "mp3-320",
+        custom_title=req.song_name,
+        custom_artist=req.artist_name,
+        custom_thumbnail=req.thumbnail or ""
+    )
+    return {
+        "success": True,
+        "task_id": task_id,
+        "candidate_url": candidate_url,
+        "title": req.song_name,
+        "artist": req.artist_name
+    }
+
+@router.get("/jobs/latest")
+def get_latest_playlist_job(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves the most recent playlist download batch job for the current user.
+    """
+    job = db.query(PlaylistDownloadJob).filter(
+        PlaylistDownloadJob.user_id == current_user.id
+    ).order_by(PlaylistDownloadJob.created_at.desc()).first()
+
+    if not job:
+        return {"success": True, "job": None}
+
+    status = PlaylistPipeline.get_job_status(job_id=job.id, user_id=current_user.id, db=db)
+    return {"success": True, "job": status}
 
 @router.get("/jobs/{job_id}")
 def check_playlist_job(
@@ -153,3 +238,39 @@ def check_playlist_job(
     if not status:
         raise HTTPException(status_code=404, detail="Playlist job not found.")
     return {"success": True, "job": status}
+
+@router.get("/jobs/{job_id}/zip")
+def download_playlist_zip(
+    job_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Streams the packaged ZIP folder containing all downloaded tracks for the playlist.
+    """
+    job = db.query(PlaylistDownloadJob).filter(
+        PlaylistDownloadJob.id == job_id
+    ).first()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Playlist job not found.")
+
+    if job.status != "COMPLETED":
+        raise HTTPException(status_code=400, detail=f"Playlist download is still processing ({job.status}).")
+
+    if not job.zip_path or not os.path.exists(job.zip_path):
+        raise HTTPException(status_code=404, detail="ZIP archive not found or has expired.")
+
+    from fastapi.responses import FileResponse
+
+    download_name = job.zip_filename or "Thanks_for_downloading.zip"
+    if not download_name.lower().endswith(".zip"):
+        download_name = f"{download_name}.zip"
+
+    return FileResponse(
+        path=job.zip_path,
+        filename=download_name,
+        media_type="application/zip",
+        headers={
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )

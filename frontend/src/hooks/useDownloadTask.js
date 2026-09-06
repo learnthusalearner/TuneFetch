@@ -44,14 +44,14 @@ export function useDownloadTask(onComplete) {
     };
   }, [activeTask?.id, activeTask?.status, onComplete]);
 
-  const startDownload = async ({ url, format, title, artist, thumbnail, trackId }) => {
+  const startDownload = async ({ url, format, title, artist, thumbnail, trackId, existingTaskId }) => {
     setError(null);
     if (trackId !== undefined) {
       setActiveTrackIndex(trackId);
     }
 
     try {
-      const taskId = await api.startDownload({ url, format, title, artist, thumbnail });
+      const taskId = existingTaskId || await api.startDownload({ url, format, title, artist, thumbnail });
       setActiveTask({
         id: taskId,
         url,

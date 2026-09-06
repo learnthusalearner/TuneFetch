@@ -17,12 +17,15 @@ from app.core.config import (
     SPOTIFY_REDIRECT_URI,
     SPOTIFY_SCOPES
 )
-from app.models.db_models import SpotifyAccount
+from app.models.db_models import SpotifyAccount, User
 from app.utils.auth_helper import encrypt_token, decrypt_token
 
 logger = logging.getLogger("spotify_service")
 
-# In-memory transient store for PKCE verifiers keyed by state (with TTL)
+import json
+import urllib.parse
+
+# In-memory transient store for PKCE verifiers keyed by state (fallback)
 _pkce_store: Dict[str, Dict[str, Any]] = {}
 
 def _generate_pkce_pair() -> Tuple[str, str]:
@@ -33,17 +36,38 @@ def _generate_pkce_pair() -> Tuple[str, str]:
     return code_verifier, code_challenge
 
 def clean_pkce_store():
-    """Removes expired OAuth states older than 10 minutes."""
+    """Removes expired OAuth states older than 15 minutes."""
     now = time.time()
-    expired = [k for k, v in _pkce_store.items() if now - v.get("timestamp", 0) > 600]
+    expired = [k for k, v in _pkce_store.items() if now - v.get("timestamp", 0) > 900]
     for k in expired:
         _pkce_store.pop(k, None)
+
+def _encode_oauth_state(user_id: str, code_verifier: str) -> str:
+    """Encodes and encrypts user_id and code_verifier into a tamper-proof state string."""
+    payload = {
+        "u": user_id,
+        "v": code_verifier,
+        "t": int(time.time())
+    }
+    return encrypt_token(json.dumps(payload))
+
+def _decode_oauth_state(state: str) -> Tuple[Optional[str], Optional[str]]:
+    """Decodes and validates encrypted OAuth state string."""
+    try:
+        raw = decrypt_token(state)
+        data = json.loads(raw)
+        # Check TTL (15 minutes)
+        if time.time() - data.get("t", 0) > 900:
+            return None, None
+        return data.get("u"), data.get("v")
+    except Exception:
+        return None, None
 
 class SpotifyService:
     @staticmethod
     def create_auth_url(user_id: str) -> str:
         """
-        Constructs the Spotify authorization URL with PKCE and state protection.
+        Constructs the Spotify authorization URL with PKCE and encrypted state protection.
         """
         if not SPOTIFY_CLIENT_ID:
             raise HTTPException(
@@ -52,10 +76,10 @@ class SpotifyService:
             )
 
         clean_pkce_store()
-        state = secrets.token_urlsafe(32)
         code_verifier, code_challenge = _generate_pkce_pair()
+        state = _encode_oauth_state(user_id, code_verifier)
 
-        # Store verifier tied to state and user
+        # Also store in memory as fallback
         _pkce_store[state] = {
             "user_id": user_id,
             "code_verifier": code_verifier,
@@ -73,7 +97,6 @@ class SpotifyService:
             "show_dialog": "true"
         }
 
-        import urllib.parse
         query_string = urllib.parse.urlencode(params)
         return f"https://accounts.spotify.com/authorize?{query_string}"
 
@@ -83,19 +106,33 @@ class SpotifyService:
         code: str,
         state: str,
         db: Session
-    ) -> SpotifyAccount:
+    ) -> Tuple[SpotifyAccount, str]:
         """
         Validates state and exchanges the authorization code for access & refresh tokens.
+        Returns (SpotifyAccount, target_user_id).
         """
         clean_pkce_store()
-        stored_data = _pkce_store.pop(state, None)
-        if not stored_data or stored_data.get("user_id") != user_id:
+        target_user_id = user_id
+        code_verifier = None
+
+        # 1. First attempt to decrypt state token
+        decoded_user_id, decoded_verifier = _decode_oauth_state(state)
+        if decoded_verifier:
+            code_verifier = decoded_verifier
+            if decoded_user_id:
+                target_user_id = decoded_user_id
+        else:
+            # 2. Fallback to memory store if state was plain
+            stored_data = _pkce_store.pop(state, None)
+            if stored_data:
+                code_verifier = stored_data.get("code_verifier")
+                target_user_id = stored_data.get("user_id", user_id)
+
+        if not code_verifier:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid or expired OAuth state parameter. Please restart authorization."
             )
-
-        code_verifier = stored_data["code_verifier"]
 
         data = {
             "grant_type": "authorization_code",
@@ -148,11 +185,30 @@ class SpotifyService:
             display_name = profile.get("display_name") or spotify_user_id
             email = profile.get("email")
 
-        # Persist or update SpotifyAccount for current user
-        account = db.query(SpotifyAccount).filter(SpotifyAccount.user_id == user_id).first()
-        if not account:
-            account = SpotifyAccount(user_id=user_id, spotify_user_id=spotify_user_id)
-            db.add(account)
+        # Persist or update SpotifyAccount for target_user_id
+        user_record = db.query(User).filter(User.id == target_user_id).first()
+        if not user_record:
+            user_record = User(id=target_user_id)
+            db.add(user_record)
+            db.commit()
+
+        # 1. Check if an account already exists with this spotify_user_id
+        account = db.query(SpotifyAccount).filter(SpotifyAccount.spotify_user_id == spotify_user_id).first()
+
+        if account:
+            # If it belonged to a previous session/user_id, reassign to current target_user_id
+            if account.user_id != target_user_id:
+                # Remove any other Spotify account that target_user_id might currently have
+                db.query(SpotifyAccount).filter(SpotifyAccount.user_id == target_user_id).delete()
+                account.user_id = target_user_id
+        else:
+            # 2. Check if current target_user_id has an existing account record
+            account = db.query(SpotifyAccount).filter(SpotifyAccount.user_id == target_user_id).first()
+            if not account:
+                account = SpotifyAccount(user_id=target_user_id, spotify_user_id=spotify_user_id)
+                db.add(account)
+            else:
+                account.spotify_user_id = spotify_user_id
 
         account.spotify_user_id = spotify_user_id
         account.display_name = display_name
@@ -166,8 +222,8 @@ class SpotifyService:
 
         db.commit()
         db.refresh(account)
-        logger.info(f"Successfully linked Spotify account '{display_name}' for user '{user_id}'.")
-        return account
+        logger.info(f"Successfully linked Spotify account '{display_name}' for user '{target_user_id}'.")
+        return account, target_user_id
 
     @staticmethod
     async def get_valid_access_token(user_id: str, db: Session) -> str:
@@ -269,7 +325,7 @@ class SpotifyService:
                         continue
                     images = item.get("images", [])
                     image_url = images[0]["url"] if images else ""
-                    tracks_info = item.get("tracks", {})
+                    tracks_info = item.get("items") or item.get("tracks") or {}
                     playlists.append({
                         "id": item.get("id"),
                         "name": item.get("name", "Untitled Playlist"),
@@ -288,7 +344,7 @@ class SpotifyService:
     async def get_playlist_tracks(user_id: str, playlist_id: str, db: Session) -> Dict[str, Any]:
         """
         Retrieves ALL tracks from a playlist, handling pagination for 10, 100, 500, 1400+ tracks.
-        Filters out null/unavailable tracks and extracts normalized metadata.
+        Supports both modern /items and legacy /tracks endpoints, extracting normalized metadata.
         """
         token = await SpotifyService.get_valid_access_token(user_id, db)
         playlist_name = "Spotify Playlist"
@@ -298,7 +354,7 @@ class SpotifyService:
         async with httpx.AsyncClient(timeout=30.0) as client:
             # 1. Fetch playlist metadata
             meta_resp = await client.get(
-                f"https://api.spotify.com/v1/playlists/{playlist_id}?fields=id,name,images,tracks.total",
+                f"https://api.spotify.com/v1/playlists/{playlist_id}?fields=id,name,images,items.total,tracks.total",
                 headers={"Authorization": f"Bearer {token}"}
             )
             if meta_resp.status_code == 200:
@@ -307,18 +363,23 @@ class SpotifyService:
                 images = meta.get("images", [])
                 playlist_image = images[0]["url"] if images else ""
 
-            # 2. Paginate over all tracks
-            url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?limit=100"
+            # 2. Paginate over all tracks (attempt modern /items first, fallback to /tracks)
+            url = f"https://api.spotify.com/v1/playlists/{playlist_id}/items?limit=100"
             track_index = 0
 
-            while url:
+            # Test primary URL
+            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+            if resp.status_code in [403, 404]:
+                url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?limit=100"
                 resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+
+            while url:
                 if resp.status_code == 401:
                     token = await SpotifyService.get_valid_access_token(user_id, db)
                     resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
 
                 if resp.status_code != 200:
-                    logger.error(f"Error fetching playlist tracks: {resp.text}")
+                    logger.error(f"Error fetching playlist tracks from {url}: {resp.text}")
                     break
 
                 data = resp.json()
@@ -327,9 +388,11 @@ class SpotifyService:
                 for item in items:
                     if not item:
                         continue
-                    track_obj = item.get("track")
-                    # Handle invalid, null, removed, or episode items
-                    if not track_obj or not track_obj.get("name") or track_obj.get("type") != "track":
+                    track_obj = item.get("item") or item.get("track") or item
+                    # Handle invalid, null, removed, or non-track items
+                    if not track_obj or not track_obj.get("name"):
+                        continue
+                    if track_obj.get("type") and track_obj.get("type") not in ["track"]:
                         continue
 
                     track_name = track_obj.get("name", "").strip()
@@ -351,16 +414,23 @@ class SpotifyService:
                         "id": track_index,
                         "spotifyTrackId": track_obj.get("id") or f"local-{track_index}",
                         "name": track_name,
+                        "title": track_name,
+                        "song_name": track_name,
                         "artists": artists_list,
                         "artist": artist_str,
+                        "artist_name": artist_str,
                         "duration": duration_sec,
+                        "duration_ms": duration_ms,
                         "thumbnail": track_thumb,
                         "search_query": search_query,
+                        "candidate_url": None,
                         "status": "PENDING"
                     })
                     track_index += 1
 
                 url = data.get("next")
+                if url:
+                    resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
 
         return {
             "playlist_id": playlist_id,

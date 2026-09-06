@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, Music, Download, Clock, Disc3, Check, Loader2 } from 'lucide-react';
+import { X, Search, Music, Download, Clock, Disc3, Check, Loader2, CheckSquare, Square, FolderDown } from 'lucide-react';
 import { AUDIO_FORMATS } from '../../constants';
 
 export default function PlaylistTracksModal({
@@ -8,11 +8,14 @@ export default function PlaylistTracksModal({
   isOpen,
   onClose,
   onStartDownload,
+  onDownloadSingleTrack,
   isLoadingTracks,
-  isStartingDownload
+  isStartingDownload,
+  downloadingTrackId
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFormat, setSelectedFormat] = useState('mp3');
+  const [selectedFormat, setSelectedFormat] = useState('mp3-320');
+  const [selectedTrackIds, setSelectedTrackIds] = useState(new Set());
 
   if (!isOpen) return null;
 
@@ -24,11 +27,41 @@ export default function PlaylistTracksModal({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const filteredTracks = (tracks || []).filter((t) =>
-    (t.title && t.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.artists && t.artists.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.album_name && t.album_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredTracks = (tracks || []).filter((t) => {
+    const title = (t.song_name || t.title || t.name || '').toLowerCase();
+    const artist = (t.artist_name || t.artist || (Array.isArray(t.artists) ? t.artists.join(', ') : t.artists) || '').toLowerCase();
+    const album = (t.album_name || '').toLowerCase();
+    const q = searchTerm.toLowerCase();
+    return title.includes(q) || artist.includes(q) || album.includes(q);
+  });
+
+  const toggleTrackSelection = (trackId) => {
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTrackIds.size === filteredTracks.length && filteredTracks.length > 0) {
+      setSelectedTrackIds(new Set());
+    } else {
+      const allIds = filteredTracks.map((t) => t.id || t.spotifyTrackId);
+      setSelectedTrackIds(new Set(allIds));
+    }
+  };
+
+  const isAllSelected = filteredTracks.length > 0 && selectedTrackIds.size === filteredTracks.length;
+
+  const handleBatchDownloadClick = () => {
+    const trackIdsArray = selectedTrackIds.size > 0 ? Array.from(selectedTrackIds) : null;
+    onStartDownload(playlist?.id, selectedFormat, trackIdsArray);
+  };
 
   return (
     <div
@@ -53,7 +86,7 @@ export default function PlaylistTracksModal({
         className="glass-panel"
         style={{
           width: '100%',
-          maxWidth: '780px',
+          maxWidth: '820px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
@@ -110,16 +143,16 @@ export default function PlaylistTracksModal({
           </button>
         </div>
 
-        {/* Search and Action Bar */}
+        {/* Search, Format and Action Bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-          <div style={{ position: 'relative', flex: '1 1 240px' }}>
+          <div style={{ position: 'relative', flex: '1 1 220px' }}>
             <Search
               size={15}
               style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
             />
             <input
               type="text"
-              placeholder="Search extracted tracks..."
+              placeholder="Search songs or artists..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -135,7 +168,30 @@ export default function PlaylistTracksModal({
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Select All Toggle */}
+            {tracks && tracks.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleSelectAll}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 12px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: isAllSelected ? 'var(--accent-green)' : 'var(--text-secondary)',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                {isAllSelected ? <CheckSquare size={15} /> : <Square size={15} />}
+                <span>{isAllSelected ? 'Deselect All' : 'Select All'}</span>
+              </button>
+            )}
+
             {/* Format Selector */}
             <select
               value={selectedFormat}
@@ -153,34 +209,38 @@ export default function PlaylistTracksModal({
               }}
             >
               {(AUDIO_FORMATS || [
-                { value: 'mp3', label: 'MP3' },
-                { value: 'm4a', label: 'M4A / AAC' },
-                { value: 'flac', label: 'FLAC' },
-                { value: 'wav', label: 'WAV' },
-                { value: 'opus', label: 'OPUS' }
+                { id: 'mp3-320', label: 'MP3 • 320 kbps' },
+                { id: 'mp3-256', label: 'MP3 • 256 kbps' },
+                { id: 'mp3-128', label: 'MP3 • 128 kbps' },
+                { id: 'best-audio', label: 'Original Stream' }
               ]).map((fmt) => (
-                <option key={fmt.value} value={fmt.value} style={{ background: '#101522', color: '#fff' }}>
+                <option key={fmt.id || fmt.value} value={fmt.id || fmt.value} style={{ background: '#101522', color: '#fff' }}>
                   {fmt.label}
                 </option>
               ))}
             </select>
 
-            {/* Download All Button */}
+            {/* Batch Folder Download Button */}
             <button
               className="btn-download-action"
-              onClick={() => onStartDownload(playlist?.id, selectedFormat)}
+              onClick={handleBatchDownloadClick}
               disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
-              style={{ padding: '9px 20px', fontSize: '13px' }}
+              style={{ padding: '10px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
             >
               {isStartingDownload ? (
                 <>
                   <Loader2 size={16} className="spinner" />
-                  <span>Starting...</span>
+                  <span>Preparing Folder...</span>
+                </>
+              ) : selectedTrackIds.size > 0 ? (
+                <>
+                  <FolderDown size={16} />
+                  <span>Download Selected Folder ({selectedTrackIds.size} Songs)</span>
                 </>
               ) : (
                 <>
-                  <Download size={16} />
-                  <span>Download All ({tracks?.length || 0})</span>
+                  <FolderDown size={16} />
+                  <span>Download All as Folder ({tracks?.length || 0} Songs)</span>
                 </>
               )}
             </button>
@@ -210,66 +270,165 @@ export default function PlaylistTracksModal({
               <p style={{ fontSize: '14px' }}>No tracks match your search.</p>
             </div>
           ) : (
-            filteredTracks.map((t, index) => (
-              <div
-                key={t.id || index}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(255, 255, 255, 0.04)',
-                  transition: 'background 0.2s ease'
-                }}
-              >
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '24px', textAlign: 'right' }}>
-                  {index + 1}
-                </span>
+            filteredTracks.map((t, index) => {
+              const trackId = t.id || t.spotifyTrackId || String(index);
+              const isSelected = selectedTrackIds.has(trackId);
+              const isSingleDownloading = downloadingTrackId === trackId;
+              const songTitle = t.song_name || t.title || t.name;
+              const songArtist = t.artist_name || t.artist || (Array.isArray(t.artists) ? t.artists.join(', ') : t.artists);
 
-                {t.thumbnail ? (
-                  <img
-                    src={t.thumbnail}
-                    alt={t.title}
-                    style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div
+              return (
+                <div
+                  key={trackId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: isSelected ? 'rgba(29, 185, 84, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                    border: isSelected ? '1px solid rgba(29, 185, 84, 0.3)' : '1px solid rgba(255, 255, 255, 0.04)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {/* Selection Checkbox */}
+                  <button
+                    type="button"
+                    onClick={() => toggleTrackSelection(trackId)}
                     style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '6px',
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: isSelected ? 'var(--accent-green)' : 'var(--text-muted)',
+                      padding: '2px',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                      flexShrink: 0
+                      alignItems: 'center'
                     }}
+                    title={isSelected ? 'Deselect song' : 'Select song'}
                   >
-                    <Music size={16} />
-                  </div>
-                )}
+                    {isSelected ? <CheckSquare size={17} /> : <Square size={17} />}
+                  </button>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {t.title}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {t.artists} {t.album_name ? `• ${t.album_name}` : ''}
-                  </div>
-                </div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '20px', textAlign: 'right' }}>
+                    {index + 1}
+                  </span>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
-                  <Clock size={12} />
-                  <span>{formatDuration(t.duration_ms)}</span>
+                  {t.thumbnail ? (
+                    <img
+                      src={t.thumbnail}
+                      alt={songTitle}
+                      style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--text-muted)',
+                        flexShrink: 0
+                      }}
+                    >
+                      <Music size={16} />
+                    </div>
+                  )}
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {songTitle}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {songArtist} {t.album_name ? `• ${t.album_name}` : ''}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                    <Clock size={12} />
+                    <span>{formatDuration(t.duration_ms)}</span>
+                  </div>
+
+                  {/* Individual Download Song Button */}
+                  {onDownloadSingleTrack && (
+                    <button
+                      className="icon-btn"
+                      onClick={() => onDownloadSingleTrack(t, selectedFormat, trackId)}
+                      disabled={isSingleDownloading}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '1px solid var(--border-glass)',
+                        color: 'var(--text-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Download only this track as MP3"
+                    >
+                      {isSingleDownloading ? (
+                        <Loader2 size={13} className="spinner" style={{ color: 'var(--accent-green)' }} />
+                      ) : (
+                        <Download size={13} style={{ color: 'var(--accent-green)' }} />
+                      )}
+                      <span>Track (.mp3)</span>
+                    </button>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
+        </div>
+
+        {/* Modal Footer Action Bar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderTop: '1px solid var(--border-glass)',
+            paddingTop: '14px',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}
+        >
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            {selectedTrackIds.size > 0 ? (
+              <span><strong>{selectedTrackIds.size}</strong> of {filteredTracks.length} songs selected</span>
+            ) : (
+              <span>All <strong>{filteredTracks.length}</strong> songs will be packaged into a single folder</span>
+            )}
+          </div>
+
+          <button
+            className="btn-download-action"
+            onClick={handleBatchDownloadClick}
+            disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
+            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            {isStartingDownload ? (
+              <>
+                <Loader2 size={16} className="spinner" />
+                <span>Preparing Folder...</span>
+              </>
+            ) : (
+              <>
+                <FolderDown size={18} />
+                <span>
+                  {selectedTrackIds.size > 0
+                    ? `Download Selected Folder (${selectedTrackIds.size} Songs)`
+                    : `Download All Songs as Folder (${tracks?.length || 0})`}
+                </span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
   );
 }
+

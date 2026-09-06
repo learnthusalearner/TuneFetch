@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   HISTORY: 'tunefetch_download_history',
+  SPOTIFY_ACTIVE_JOB: 'tunefetch_active_spotify_job',
 };
 
 export const AUDIO_FORMATS = [

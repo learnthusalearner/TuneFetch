@@ -51,7 +51,22 @@ class PlaylistDownloadJob(Base):
     failed_tracks = Column(Integer, default=0)
     status = Column(String(32), default="QUEUED", index=True) # QUEUED, PROCESSING, COMPLETED, FAILED
     tracks_data = Column(Text, nullable=True) # JSON serialized list of tracks with per-track status
+    zip_path = Column(String(512), nullable=True) # Path to generated .zip file containing all downloaded tracks
+    zip_filename = Column(String(256), nullable=True) # Client filename for the zip archive
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     user = relationship("User", back_populates="download_jobs")
+
+class ResolvedSong(Base):
+    __tablename__ = "resolved_songs"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid, index=True)
+    song_name = Column(String(256), nullable=False)
+    artist_name = Column(String(256), nullable=False)
+    song_name_clean = Column(String(256), nullable=False, index=True)
+    artist_name_clean = Column(String(256), nullable=False, index=True)
+    candidate_url = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+

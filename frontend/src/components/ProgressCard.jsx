@@ -27,19 +27,29 @@ export default function ProgressCard({ task, onPlayAudio }) {
     }
   }, [isCompleted]);
 
-  const handleDirectDownload = () => {
+  const handleDirectDownload = async () => {
     if (!task.file_id) return;
     const finalFilename = sanitizeClientFilename(task.filename || task.title || 'audio', '.mp3');
     const downloadUrl = api.getDownloadUrl(task.file_id, finalFilename);
 
-    // Create a physical link to ensure standard browser download behavior
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.setAttribute('download', finalFilename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setHasDownloaded(true);
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error('Download request failed');
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = finalFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      setHasDownloaded(true);
+    } catch {
+      // Fallback
+      window.location.href = downloadUrl;
+      setHasDownloaded(true);
+    }
   };
 
   return (

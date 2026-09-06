@@ -40,7 +40,7 @@ MAX_TASK_HISTORY = 300         # Maximum number of task records kept in memory
 
 # Storage and Lifecycle
 AUTO_DELETE_ON_DOWNLOAD = True # Automatically delete the file immediately after user downloads
-MAX_FILE_AGE_SECONDS = 300     # 5 minutes threshold: deletes abandoned/un-downloaded files
+MAX_FILE_AGE_SECONDS = 7200    # 2 hours threshold: allows large playlist downloads and users returning later
 CLEANUP_INTERVAL_SECONDS = 60  # Sweeper interval for garbage collection daemon
 
 # Audio settings

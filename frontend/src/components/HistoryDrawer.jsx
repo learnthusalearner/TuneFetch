@@ -4,6 +4,27 @@ import { api } from '../services/api';
 import { formatTimestamp, sanitizeClientFilename } from '../utils/formatters';
 
 export default function HistoryDrawer({ history, onPlay, onClear, onClose }) {
+  const handleSaveItem = async (e, item) => {
+    e.preventDefault();
+    const fileName = sanitizeClientFilename(item.filename || item.title || 'audio', '.mp3');
+    const downloadUrl = api.getDownloadUrl(item.file_id, fileName);
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.location.href = downloadUrl;
+    }
+  };
+
   return (
     <div className="glass-panel history-modal">
       <div className="history-header">
@@ -46,7 +67,6 @@ export default function HistoryDrawer({ history, onPlay, onClear, onClose }) {
         <div className="history-list">
           {history.map((item, idx) => {
             const fileName = sanitizeClientFilename(item.filename || item.title || 'audio', '.mp3');
-            const downloadUrl = api.getDownloadUrl(item.file_id, fileName);
 
             return (
               <div key={item.file_id || idx} className="history-item">
@@ -94,15 +114,15 @@ export default function HistoryDrawer({ history, onPlay, onClear, onClose }) {
                     <Play size={13} />
                   </button>
 
-                  <a
-                    href={downloadUrl}
-                    download={fileName}
+                  <button
+                    onClick={(e) => handleSaveItem(e, item)}
                     className="btn-track-dl"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: 'none', border: 'none', cursor: 'pointer' }}
+                    title={`Save ${fileName}`}
                   >
                     <Download size={13} />
                     <span>Save</span>
-                  </a>
+                  </button>
                 </div>
               </div>
             );

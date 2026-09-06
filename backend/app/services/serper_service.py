@@ -1,90 +1,151 @@
 import re
 import logging
-from typing import List, Optional
+from typing import List, Union, Optional
 import httpx
+from sqlalchemy.orm import Session
 
 from app.core.config import SERPER_API_KEY
+from app.models.db_models import ResolvedSong
 
 logger = logging.getLogger("serper_service")
 
-# Regex pattern for preferred yt-dlp media sources
-PREFERRED_DOMAINS = [
-    r"https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+",
-    r"https?://(?:www\.)?music\.youtube\.com/watch\?v=[\w-]+",
-    r"https?://youtu\.be/[\w-]+",
-    r"https?://(?:www\.)?soundcloud\.com/[\w-]+/[\w-]+",
-]
+# Preferred patterns for yt-dlp supported video URLs
+YOUTUBE_WATCH_REGEX = re.compile(r"https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]+)", re.IGNORECASE)
 
 class SerperService:
     @staticmethod
-    def construct_search_query(song_name: str, artists: List[str]) -> str:
-        """Builds a refined search query string from song metadata."""
-        artists_str = " ".join(artists) if artists else ""
-        return f"{song_name} {artists_str} audio".strip()
+    def construct_search_query(song_name: str, artists: Union[List[str], str]) -> str:
+        """
+        Builds the programmatic Serper query:
+        site:youtube.com/watch "song name" "artist name"
+        """
+        if isinstance(artists, list):
+            artist_str = " ".join(artists) if artists else ""
+        else:
+            artist_str = (artists or "").strip()
+
+        clean_song = song_name.replace('"', '').strip()
+        clean_artist = artist_str.replace('"', '').strip()
+
+        if clean_artist:
+            return f'site:youtube.com/watch "{clean_song}" "{clean_artist}"'
+        return f'site:youtube.com/watch "{clean_song}"'
 
     @staticmethod
-    async def find_best_audio_url(song_name: str, artists: List[str]) -> str:
+    async def find_best_audio_url(
+        song_name: str,
+        artists: Union[List[str], str],
+        db: Optional[Session] = None
+    ) -> str:
         """
-        Queries Serper API to find a high-relevance video/audio URL for yt-dlp.
-        Falls back to direct ytsearch syntax if Serper API key is missing or encounters rate limits.
+        Retrieves candidate YouTube URL for a song.
+        1. Checks database cache (matching BOTH song_name and artist_name).
+           If matched, uses directly from database without calling Serper API.
+        2. If not found, calls Serper API: site:youtube.com/watch "song name" "artist name"
+        3. Caches the newly resolved URL into PostgreSQL for future instant reuse.
         """
-        query = SerperService.construct_search_query(song_name, artists)
+        clean_song = song_name.strip()
+        if isinstance(artists, list):
+            clean_artist = ", ".join([a.strip() for a in artists if a.strip()])
+        else:
+            clean_artist = (artists or "").strip()
 
-        # Fallback if no Serper API key configured
+        song_key = clean_song.lower()
+        artist_key = clean_artist.lower()
+
+        # Step 1: Check database cache for exact match on both song name and artist
+        if db:
+            try:
+                cached = db.query(ResolvedSong).filter(
+                    ResolvedSong.song_name_clean == song_key,
+                    ResolvedSong.artist_name_clean == artist_key
+                ).first()
+                if cached and cached.candidate_url:
+                    logger.info(f"[DB Cache Hit] Reusing stored candidate URL for '{clean_song}' by '{clean_artist}': {cached.candidate_url}")
+                    return cached.candidate_url
+            except Exception as db_err:
+                logger.warning(f"Error reading from resolved_songs DB cache: {db_err}")
+
+        # Step 2: Query Serper API
+        query = SerperService.construct_search_query(clean_song, clean_artist)
+        candidate_url = None
+
         if not SERPER_API_KEY:
-            logger.info(f"SERPER_API_KEY not configured. Defaulting to ytsearch query: '{query}'")
-            return f"ytsearch1:{query}"
+            fallback_query = f"{clean_song} {clean_artist} audio".strip()
+            logger.info(f"SERPER_API_KEY not configured. Defaulting to ytsearch: '{fallback_query}'")
+            candidate_url = f"ytsearch1:{fallback_query}"
+        else:
+            try:
+                headers = {
+                    "X-API-KEY": SERPER_API_KEY,
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "q": query,
+                    "num": 5
+                }
 
-        try:
-            headers = {
-                "X-API-KEY": SERPER_API_KEY,
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "q": f"{query} site:youtube.com OR site:soundcloud.com",
-                "num": 5
-            }
-
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # 1. Search Videos first for high relevance
-                resp = await client.post(
-                    "https://google.serper.dev/videos",
-                    headers=headers,
-                    json={"q": query, "num": 5}
-                )
-
-                candidate_urls: List[str] = []
-                if resp.status_code == 200:
-                    data = resp.json()
-                    videos = data.get("videos", [])
-                    for v in videos:
-                        link = v.get("link")
-                        if link:
-                            candidate_urls.append(link)
-
-                # 2. Search Organic if video search returned nothing
-                if not candidate_urls:
-                    resp_org = await client.post(
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
                         "https://google.serper.dev/search",
                         headers=headers,
                         json=payload
                     )
-                    if resp_org.status_code == 200:
-                        org_data = resp_org.json()
-                        for item in org_data.get("organic", []):
-                            link = item.get("link")
-                            if link:
-                                candidate_urls.append(link)
 
-                # 3. Filter candidates for valid yt-dlp supported audio URLs
-                for cand in candidate_urls:
-                    for pattern in PREFERRED_DOMAINS:
-                        if re.match(pattern, cand, re.IGNORECASE):
-                            logger.info(f"Serper matched candidate URL for '{query}': {cand}")
-                            return cand
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        for item in data.get("organic", []):
+                            link = item.get("link", "")
+                            if YOUTUBE_WATCH_REGEX.search(link):
+                                logger.info(f"Serper resolved candidate URL for '{query}': {link}")
+                                candidate_url = link
+                                break
 
-        except Exception as e:
-            logger.warning(f"Serper API query failed for '{query}': {e}. Falling back to ytsearch.")
+                    # Secondary fallback: video search endpoint
+                    if not candidate_url:
+                        video_resp = await client.post(
+                            "https://google.serper.dev/videos",
+                            headers=headers,
+                            json={"q": f"{clean_song} {clean_artist} audio", "num": 5}
+                        )
+                        if video_resp.status_code == 200:
+                            v_data = video_resp.json()
+                            for v in v_data.get("videos", []):
+                                link = v.get("link", "")
+                                if YOUTUBE_WATCH_REGEX.search(link):
+                                    logger.info(f"Serper video endpoint resolved candidate URL for '{query}': {link}")
+                                    candidate_url = link
+                                    break
 
-        # Reliable fallback if Serper found no direct matching links
-        return f"ytsearch1:{query}"
+            except Exception as e:
+                logger.warning(f"Serper API query failed for '{query}': {e}. Falling back to ytsearch.")
+
+        if not candidate_url:
+            fallback_query = f"{clean_song} {clean_artist} audio".strip()
+            candidate_url = f"ytsearch1:{fallback_query}"
+
+        # Step 3: Cache the resolved URL into PostgreSQL database
+        if db and candidate_url:
+            try:
+                cached_entry = db.query(ResolvedSong).filter(
+                    ResolvedSong.song_name_clean == song_key,
+                    ResolvedSong.artist_name_clean == artist_key
+                ).first()
+                if not cached_entry:
+                    cached_entry = ResolvedSong(
+                        song_name=clean_song,
+                        artist_name=clean_artist,
+                        song_name_clean=song_key,
+                        artist_name_clean=artist_key,
+                        candidate_url=candidate_url
+                    )
+                    db.add(cached_entry)
+                else:
+                    cached_entry.candidate_url = candidate_url
+                db.commit()
+                logger.info(f"[DB Cache Stored] Saved '{clean_song}' by '{clean_artist}' -> {candidate_url}")
+            except Exception as save_err:
+                logger.warning(f"Error persisting resolved song to DB cache: {save_err}")
+                db.rollback()
+
+        return candidate_url

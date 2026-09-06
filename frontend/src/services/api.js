@@ -139,19 +139,46 @@ export const api = {
 
   /**
    * Dispatches Spotify Playlist -> Serper -> Existing yt-dlp Downloader pipeline
+   * Supports optional trackIds to download selected subset
    */
-  async startPlaylistDownload(playlistId, format = 'mp3-320') {
+  async startPlaylistDownload(playlistId, format = 'mp3-320', trackIds = null) {
+    const payload = { format };
+    if (trackIds && trackIds.length > 0) {
+      payload.track_ids = trackIds;
+    }
     const res = await fetch(`/spotify/playlists/${playlistId}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ format }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to start playlist download.');
     }
     return data.job_id;
+  },
+
+  /**
+   * Dispatches single track download with DB caching & Serper candidate resolution
+   */
+  async downloadSingleSpotifyTrack({ song_name, artist_name, thumbnail, format = 'mp3-320' }) {
+    const res = await fetch(`/spotify/track/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        song_name,
+        artist_name,
+        thumbnail,
+        format,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to download track.');
+    }
+    return data;
   },
 
   /**
@@ -164,5 +191,27 @@ export const api = {
       throw new Error(data.detail || 'Failed to get playlist job status.');
     }
     return data.job;
+  },
+
+  /**
+   * Retrieves the most recent playlist download batch job for the current user
+   */
+  async getLatestPlaylistJob() {
+    try {
+      const res = await fetch(`/spotify/jobs/latest`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.job || null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Returns the direct download URL for the packaged playlist ZIP archive
+   */
+  getPlaylistZipUrl(jobId) {
+    if (!jobId) return '';
+    return `/spotify/jobs/${jobId}/zip`;
   }
 };
