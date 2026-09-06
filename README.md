@@ -701,3 +701,9 @@ pytest tests/test_spotify_pipeline.py
 ## 📄 License
 
 Distributed under the **MIT License**. See `LICENSE` for more information.
+
+---
+
+<p align="center">
+  <strong>Made by Kunal Srivastava with ❤️ • Free to use if anyone wants it!</strong>
+</p>

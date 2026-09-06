@@ -782,7 +782,7 @@ export default function App() {
         <footer className="footer">
           <p>TuneFetch • High-Fidelity Audio Extractor & Spotify Downloader</p>
           <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Integrated with Neon PostgreSQL, Spotify Web API & Serper Candidate Resolution
+            Made by Kunal Srivastava with ❤️ • Free to use if anyone wants it!
           </p>
         </footer>
       </div>
