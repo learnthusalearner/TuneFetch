@@ -1,26 +1,37 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.routes.health import router as health_router
 from app.routes.media import router as media_router
+from app.routes.spotify import router as spotify_router
 from app.core.config import APP_TITLE, APP_DESCRIPTION, APP_VERSION, CORS_ORIGINS
+from app.core.database import init_db
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize Neon PostgreSQL tables
+    init_db()
+    yield
+
 def create_app() -> FastAPI:
     """
-    Application factory for TuneFetch FastAPI backend.
+    Application factory for TuneFetch FastAPI backend with Spotify OAuth & PostgreSQL.
     """
     app = FastAPI(
         title=APP_TITLE,
         description=APP_DESCRIPTION,
-        version=APP_VERSION
+        version=APP_VERSION,
+        lifespan=lifespan
     )
 
-    # CORS configuration
+    # CORS configuration with credentials enabled for session cookies
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
@@ -33,6 +44,7 @@ def create_app() -> FastAPI:
     # Register modular route controllers
     app.include_router(health_router)
     app.include_router(media_router)
+    app.include_router(spotify_router)
 
     @app.get("/", tags=["Root"])
     def root():

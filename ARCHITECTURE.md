@@ -8,9 +8,10 @@ This document provides an exhaustive reference of the architecture, file structu
 
 ```mermaid
 graph TD
-    subgraph Client ["Frontend: React and Vite"]
-        UI[App.jsx and UI Components]
-        Hooks[useDownloadTask and useLocalStorage]
+    subgraph Client ["Frontend: React & Vite"]
+        UI[App.jsx & UI Components]
+        SpotifyUI[SpotifyConnect / SpotifyPlaylists / Modal / BatchProgress]
+        Hooks[useDownloadTask & useLocalStorage]
         APIClient[services/api.js]
         Formatters[utils/formatters.js]
     end
@@ -18,44 +19,54 @@ graph TD
     subgraph Server ["Backend: FastAPI Engine"]
         Main[app/main.py]
         RouterMedia[routes/media.py]
+        RouterSpotify[routes/spotify.py]
         RouterHealth[routes/health.py]
-        Schemas[models/schemas.py]
-        Config[core/config.py]
-        Downloader[services/downloader.py]
+        Database[core/database.py & Neon PostgreSQL]
+        AuthHelper[utils/auth_helper.py & Fernet Crypto]
+        SpotifyService[services/spotify_service.py]
+        SerperService[services/serper_service.py]
+        PlaylistPipeline[services/playlist_pipeline.py]
+        Downloader[services/downloader.py - UNTOUCHED]
         SpotifyRes[services/spotify_resolver.py]
         FFmpegHelper[utils/ffmpeg_helper.py]
         Sanitizer[utils/sanitizer.py]
     end
 
-    subgraph External ["External Services and Binaries"]
+    subgraph External ["External Services, APIs & Binaries"]
+        SpotifyOAuth[Spotify Accounts & Web API]
+        SerperAPI[Serper Google Video Search API]
+        NeonDB[(Neon PostgreSQL Cloud DB)]
         YTDLP[yt-dlp Engine]
         ImageIO[imageio-ffmpeg Binary]
-        SpotifyEmbed[Spotify oEmbed and Embed]
-        YouTube[YouTube Media CDN]
     end
 
+    UI --> SpotifyUI
     UI --> Hooks
-    UI --> Formatters
+    SpotifyUI --> APIClient
     Hooks --> APIClient
     APIClient -->|HTTP REST / Proxied| Main
     Main --> RouterMedia
+    Main --> RouterSpotify
     Main --> RouterHealth
-    RouterMedia --> Schemas
+    RouterSpotify --> AuthHelper
+    RouterSpotify --> SpotifyService
+    RouterSpotify --> PlaylistPipeline
+    SpotifyService --> SpotifyOAuth
+    SpotifyService --> Database
+    Database --> NeonDB
+    PlaylistPipeline --> SpotifyService
+    PlaylistPipeline --> SerperService
+    PlaylistPipeline --> Downloader
+    SerperService --> SerperAPI
     RouterMedia --> Downloader
-    RouterMedia --> Sanitizer
-    RouterHealth --> FFmpegHelper
-    Downloader --> SpotifyRes
-    Downloader --> FFmpegHelper
     Downloader --> YTDLP
-    Downloader --> Config
-    SpotifyRes --> SpotifyEmbed
+    Downloader --> FFmpegHelper
     FFmpegHelper --> ImageIO
-    YTDLP --> YouTube
 ```
 
 ---
 
-## 🔄 End-to-End Sequence Diagram
+## 🔄 Spotify OAuth & Batch Playlist Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -63,282 +74,144 @@ sequenceDiagram
     actor User
     participant Frontend as React Frontend
     participant API as FastAPI Backend
-    participant Downloader as DownloadManager
-    participant Spotify as SpotifyResolver
-    participant YTDLP as yt-dlp Engine
-    participant FS as Local File System
+    participant SpotifyAPI as Spotify Web API
+    participant NeonDB as Neon PostgreSQL
+    participant Serper as Serper API
+    participant Downloader as DownloadManager (Untouched)
 
-    %% 1. Metadata Phase
-    User->>Frontend: Paste Spotify or YouTube URL
-    Frontend->>API: POST /api/info
-    alt is Spotify URL
-        API->>Spotify: resolve_spotify_track()
-        Spotify-->>API: Metadata and search query
-    else is YouTube or Direct URL
-        API->>Downloader: extract_info()
-        Downloader-->>API: Metadata
+    %% 1. OAuth PKCE Initiation
+    User->>Frontend: Click "Connect Spotify"
+    Frontend->>API: GET /spotify/auth
+    API->>API: Generate PKCE code_verifier and code_challenge
+    API->>Frontend: Set HTTP-Only Session Cookie & Redirect to Spotify
+    Frontend->>SpotifyAPI: User authorizes scopes (playlist-read-private)
+    SpotifyAPI-->>API: Redirect to GET /spotify/callback?code=...
+
+    %% 2. Token Exchange & Fernet Encryption
+    API->>SpotifyAPI: Exchange code + code_verifier for Access & Refresh Tokens
+    SpotifyAPI-->>API: Return tokens
+    API->>API: Encrypt tokens with Fernet AES-128-CBC
+    API->>NeonDB: Upsert SpotifyAccount record
+    API-->>Frontend: Redirect to /?spotify=connected
+
+    %% 3. Playlist Fetching & Pagination
+    Frontend->>API: GET /spotify/playlists
+    API->>SpotifyAPI: Fetch user playlists with pagination
+    SpotifyAPI-->>API: Return playlist array
+    API-->>Frontend: Render SpotifyPlaylists grid
+
+    %% 4. Track Inspection (Up to 1,400+ tracks)
+    User->>Frontend: Select Playlist
+    Frontend->>API: GET /spotify/playlists/{id}/tracks
+    loop Paginate until next is null
+        API->>SpotifyAPI: GET /v1/playlists/{id}/tracks?limit=100
+        SpotifyAPI-->>API: Page items
     end
-    API-->>Frontend: Return media metadata
-    Frontend-->>User: Render MediaCard preview
+    API-->>Frontend: Return normalized tracks list
+    Frontend-->>User: Open PlaylistTracksModal preview
 
-    %% 2. Download Phase
-    User->>Frontend: Select bitrate and click Download
-    Frontend->>API: POST /api/download
-    API->>Downloader: create_download_task()
-    Downloader->>Downloader: Submit task to Bounded ThreadPool
-    Downloader-->>API: Return task_id
-    API-->>Frontend: Return task_id
+    %% 5. Batch Download Dispatch
+    User->>Frontend: Click "Download All" (Select Format)
+    Frontend->>API: POST /spotify/playlists/{id}/download
+    API->>NeonDB: Create PlaylistDownloadJob (status: pending)
+    API->>API: Spawn background asyncio worker
+    API-->>Frontend: Return job_id
 
-    %% 3. Polling & Progress Phase
-    loop Every 750ms
-        Frontend->>API: GET /api/status/{task_id}
-        API->>Downloader: get_task_status()
-        Downloader-->>API: Progress percentage, speed, and ETA
-        API-->>Frontend: Task status JSON
-        Frontend-->>User: Update progress bar animation
+    %% 6. Worker Execution: Serper -> yt-dlp
+    loop For each song in playlist
+        API->>Serper: Search "Song Artist audio"
+        Serper-->>API: Candidate YouTube/Audio URL
+        API->>Downloader: create_download_task(url, format, title, artist, thumbnail)
+        Downloader->>Downloader: Execute yt-dlp in ThreadPoolExecutor
+        Downloader-->>API: Task completed
+        API->>NeonDB: Increment processed_tracks / successful_tracks
     end
-
-    %% 4. Execution & Conversion
-    Downloader->>YTDLP: Download audio stream and extract MP3
-    YTDLP->>FS: Write converted MP3 file
-    Downloader->>Downloader: Mark status completed with filename and size
-
-    %% 5. File Retrieval & Auto-Purge Phase
-    Frontend->>Frontend: Detect status completed and trigger confetti
-    User->>Frontend: Click Save MP3 File
-    Frontend->>API: GET /api/file/{task_id}/{filename}
-    API->>FS: Read audio file
-    API-->>Frontend: Stream audio FileResponse with attachment header
-    Frontend-->>User: Browser saves MP3 file to client disk
-    Note over API,FS: FastAPI BackgroundTasks purges file from server disk
-    API->>Downloader: delete_task_file_safely()
-    Downloader->>FS: Delete physical file from server storage
+    API->>NeonDB: Mark Job Completed
 ```
 
 ---
 
-## 🐍 Backend Architecture Specification
+## 📂 File-by-File Technical Specification
 
-### 1. `backend/app/core/config.py`
-**Purpose**: Centralized application configuration and constants.
+### 1. Backend Layer (`backend/app/`)
 
-| Variable | Type | Description |
-|---|---|---|
-| `BASE_DIR` | `Path` | Absolute path to backend root directory. |
-| `DOWNLOADS_DIR` | `str` | Absolute path to temporary audio storage (`backend/downloads`). |
-| `APP_TITLE` | `str` | Application name (`TuneFetch Audio Engine`). |
-| `APP_VERSION` | `str` | Semantic version string (`1.0.0`). |
-| `MAX_FILE_AGE_SECONDS`| `int` | Expiration threshold (3600 seconds = 1 hour) after which temp files are cleaned up. |
-| `DEFAULT_BITRATE` | `str` | Default MP3 bitrate (`"320"`). |
-| `ALLOWED_FORMATS` | `list` | Permitted audio targets (`mp3-320`, `mp3-256`, `mp3-128`, `best-audio`). |
-| `CORS_ORIGINS` | `list` | Cross-Origin Resource Sharing allowlist (`["*"]`). |
+#### `core/config.py`
+- **Class `Settings`**: Central configuration using `pydantic-settings`.
+- **Fields**:
+  - `DATABASE_URL`: PostgreSQL connection string (Neon DB).
+  - `ENCRYPTION_KEY`: Fernet 32-byte urlsafe base64 key for encrypting Spotify tokens.
+  - `SESSION_SECRET_KEY`: Signed session secret for HMAC multi-user identification.
+  - `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`: Spotify OAuth credentials.
+  - `SERPER_API_KEY`: Serper candidate search API key.
+  - `MAX_WORKERS`, `CONCURRENT_DOWNLOAD_LIMIT`, `DOWNLOAD_DIR`, `ALLOWED_ORIGINS`.
 
----
+#### `core/database.py`
+- **Objects**: `engine` (SQLAlchemy `create_engine` with `pool_pre_ping=True`, `pool_recycle=300`), `SessionLocal` session factory, `Base` declarative base.
+- **Function `get_db()`**: FastAPI dependency yielding a clean database session per request.
+- **Function `init_db()`**: Creates all database tables during app startup lifespan.
 
-### 2. `backend/app/models/schemas.py`
-**Purpose**: Pydantic data models for strict request validation and response serialization.
+#### `models/db_models.py`
+- **Model `User`**: Multi-user account (`id`, `session_token`, `created_at`).
+- **Model `SpotifyAccount`**: Linked Spotify account (`id`, `user_id`, `spotify_user_id`, `encrypted_access_token`, `encrypted_refresh_token`, `token_expires_at`, `scopes`, `display_name`, `email`, `product`).
+- **Model `PlaylistDownloadJob`**: Batch download job tracking (`id`, `user_id`, `playlist_id`, `playlist_name`, `total_tracks`, `processed_tracks`, `successful_tracks`, `failed_tracks`, `status`, `audio_format`, `current_track`, `track_results`, `error`, `created_at`, `updated_at`).
 
-| Class | Fields | Purpose |
-|---|---|---|
-| `InfoRequest` | `url: str` | Validates input URL payload for `/api/info`. |
-| `DownloadRequest` | `url: str`, `format: Optional[str]`, `title: Optional[str]`, `artist: Optional[str]`, `thumbnail: Optional[str]` | Validates download request parameters for `/api/download`. |
-| `TrackItem` | `id: int`, `title: str`, `artist: Optional[str]`, `duration: Optional[int]`, `thumbnail: Optional[str]`, `url: Optional[str]`, `search_query: Optional[str]` | Represents a single track within a playlist. |
-| `MediaInfoResponse` | `is_playlist: bool`, `platform: str`, `title: str`, `artist: Optional[str]`, `thumbnail: Optional[str]`, `duration: Optional[int]`, `track_count: Optional[int]`, `tracks: Optional[List[TrackItem]]`, `original_url: str`, `search_query: Optional[str]`, `formats: Optional[List[str]]` | Typed response for `/api/info`. |
-| `TaskStatusResponse` | `id: str`, `url: str`, `title: str`, `artist: str`, `thumbnail: str`, `status: str`, `progress: float`, `speed: str`, `eta: str`, `file_id: Optional[str]`, `filename: Optional[str]`, `filesize: Optional[int]`, `error: Optional[str]`, `created_at: float` | Typed response for `/api/status/{task_id}`. |
-| `HealthResponse` | `status: str`, `ffmpeg_available: bool`, `ffmpeg_path: str`, `version: str` | Typed response for `/api/health`. |
+#### `utils/auth_helper.py`
+- **Function `encrypt_token(raw_token)`**: Encrypts raw OAuth string into Fernet ciphertext.
+- **Function `decrypt_token(cipher_token)`**: Decrypts ciphertext back into usable token string.
+- **Function `get_or_create_user(request, response, db)`**: Manages signed HTTP-Only `session_id` cookies and binds requests to isolated `User` records.
+- **Function `get_current_user(request, db)`**: Dependency to authenticate and isolate incoming API requests.
 
----
+#### `services/spotify_service.py`
+- **Class `SpotifyService`**:
+  - `create_auth_url(state, code_verifier)`: Generates PKCE SHA-256 `code_challenge` and authorization URL.
+  - `exchange_code_for_tokens(code, code_verifier)`: Exchanges auth code for access & refresh tokens.
+  - `get_valid_access_token(user_id, db)`: Transparently refreshes expired access tokens and updates encrypted database records.
+  - `get_user_playlists(access_token)`: Fetches all public, private, and collaborative playlists.
+  - `get_playlist_tracks(access_token, playlist_id)`: Asynchronously paginates through 100-track chunks to extract all tracks (supporting 1,400+ songs) while filtering unavailable/invalid items.
 
-### 3. `backend/app/utils/ffmpeg_helper.py`
-**Purpose**: FFmpeg executable detection and standalone fallback.
+#### `services/serper_service.py`
+- **Class `SerperService`**:
+  - `resolve_candidate_url(song_title, artist_name)`: Queries Serper Google Video search (`"{title} {artists} audio"`) to find exact candidate YouTube/Music video URLs.
+  - Fallback mechanism: Returns `ytsearch1:{query}` if Serper API is unconfigured or rate-limited.
 
-| Function | Signature | Description | Connected To |
-|---|---|---|---|
-| `get_ffmpeg_path()` | `() -> str \| None` | Checks system PATH via `shutil.which("ffmpeg")`. If missing, imports `imageio_ffmpeg` and retrieves `imageio_ffmpeg.get_ffmpeg_exe()`. | Called by `app.services.downloader` (for `yt-dlp` postprocessors) and `app.routes.health`. |
+#### `services/playlist_pipeline.py`
+- **Class `PlaylistPipeline`**:
+  - `start_playlist_download(job_id, playlist_id, format, user_id)`: Non-blocking background worker that iterates extracted tracks, queries Serper, passes candidates into **unmodified `DownloadManager`**, and updates PostgreSQL job status.
 
----
+#### `services/downloader.py` *(UNMODIFIED)*
+- **Class `DownloadManager`**: Core `yt-dlp` download manager with thread pools, progress tracking hooks, and temporary file lifecycle management.
 
-### 4. `backend/app/utils/sanitizer.py`
-**Purpose**: Filename sanitation, character cleaning, and HTTP header synthesis.
-
-| Function | Signature | Description | Connected To |
-|---|---|---|---|
-| `sanitize_filename(filename, fallback_ext)` | `(str, str) -> str` | Strips illegal filesystem characters (`<>:"/\|?*`) across operating systems. | Called by `build_content_disposition_header` and `downloader.py`. |
-| `build_content_disposition_header(filename, ext)` | `(str, str) -> Tuple[str, str]` | Generates dual-format `Content-Disposition` header: ASCII fallback `filename="..."` and RFC 5987 UTF-8 `filename*=UTF-8''...`, plus MIME content type. | Called by `app.routes.media.download_file()`. |
-
----
-
-### 5. `backend/app/services/spotify_resolver.py`
-**Purpose**: Extracts metadata from Spotify links without requiring private developer API credentials.
-
-| Function | Signature | Description | Connected To |
-|---|---|---|---|
-| `is_spotify_url(url)` | `(str) -> bool` | Detects if a URL is a Spotify entity. | Called by `downloader.py` and `spotify_resolver.py`. |
-| `parse_spotify_type_and_id(url)` | `(str) -> Tuple[Optional[str], Optional[str]]` | Regex extraction of entity type (`track`, `playlist`, `album`) and ID. | Called by resolver functions. |
-| `resolve_spotify_track(url)` | `(str) -> Dict[str, Any]` | Queries Spotify oEmbed endpoint and parses Spotify embed HTML to extract track title, artist name, cover art, and duration. Builds `ytsearch` query. | Called by `DownloadManager.get_info()` and `DownloadManager._run_download()`. |
-| `resolve_spotify_playlist_or_album(url)` | `(str) -> Dict[str, Any]` | Scrapes Spotify playlist embed JSON state (`__NEXT_DATA__`) to extract full tracklist, individual titles, artists, and artwork. | Called by `DownloadManager.get_info()`. |
-
----
-
-### 6. `backend/app/services/downloader.py`
-**Purpose**: Core media extraction, background worker lifecycle, `yt-dlp` coordination, and task state tracking.
-
-| Function / Method | Signature | Description | Connected To |
-|---|---|---|---|
-| `cleanup_old_files(max_age_seconds)` | `(int) -> None` | Scans `backend/downloads/` and removes audio files exceeding `MAX_FILE_AGE_SECONDS`. | Called at the start of each download task. |
-| `DownloadManager.get_info(url)` | `(str) -> Dict[str, Any]` | Extracts metadata from Spotify or generic/YouTube URLs without triggering audio download. | Invoked by `app.routes.media.fetch_info()`. |
-| `DownloadManager.create_download_task(...)` | `(url, format_type, title, artist, thumbnail) -> str` | Generates UUID, creates thread-safe task record in `tasks` dict, and spawns `_run_download` daemon thread. | Invoked by `app.routes.media.start_download()`. |
-| `DownloadManager._run_download(...)` | `(task_id, url, format_type, title, artist) -> None` | Thread worker: resolves Spotify queries, configures `yt-dlp` with FFmpeg MP3 postprocessors, monitors progress hook, saves `.mp3`, and updates task status. | Runs in daemon thread. |
-| `DownloadManager.get_task_status(task_id)` | `(str) -> Optional[Dict[str, Any]]` | Reads sanitized copy of in-memory task state. | Invoked by `app.routes.media.check_status()`. |
-| `DownloadManager.get_task_filepath(task_id)` | `(str) -> Optional[str]` | Finds and returns absolute path of completed audio file on disk. | Invoked by `app.routes.media.download_file()` and `stream_audio()`. |
+#### `routes/spotify.py`
+- Endpoints:
+  - `GET /spotify/auth`: Initiates Spotify OAuth login with PKCE.
+  - `GET /spotify/callback`: OAuth callback handler.
+  - `GET /spotify/status`: Returns current user's Spotify link state.
+  - `POST /spotify/disconnect`: Removes Spotify tokens.
+  - `GET /spotify/playlists`: Fetches user's Spotify playlists.
+  - `GET /spotify/playlists/{id}/tracks`: Fetches all tracks with pagination.
+  - `POST /spotify/playlists/{id}/download`: Dispatches background batch job.
+  - `GET /spotify/jobs/{id}`: Polls batch job progress.
 
 ---
 
-### 7. `backend/app/routes/health.py` & `media.py`
-**Purpose**: FastAPI REST controllers exposing API endpoints.
+### 2. Frontend Layer (`frontend/src/`)
 
-| Route | Method | Controller Function | Description |
-|---|---|---|---|
-| `/api/health` | `GET` | `health_check()` | Returns server status and FFmpeg path. |
-| `/api/info` | `POST` | `fetch_info(req)` | Fetches metadata for single track or playlist. |
-| `/api/download` | `POST` | `start_download(req)` | Spawns background download task, returns `task_id`. |
-| `/api/status/{task_id}` | `GET` | `check_status(task_id)` | Returns real-time download status & progress percentage. |
-| `/api/file/{task_id}` & `/api/file/{task_id}/{requested_filename}` | `GET` | `download_file(task_id, filename)` | Returns audio `FileResponse` with attachment headers. |
-| `/api/stream/{task_id}` | `GET` | `stream_audio(task_id)` | Returns streaming `FileResponse` for HTML5 preview player. |
+#### `App.jsx`
+- Mode switcher: Direct URL extraction vs Spotify OAuth & Batch Playlists.
+- URL query parameter handler (`/?spotify=connected`).
+- Job polling lifecycle manager and audio playback controller.
 
----
-
-### 8. `backend/app/main.py` & `backend/run.py`
-**Purpose**: Application setup, middleware attachment, and server launch.
-
-| Function / Component | Description | Connected To |
-|---|---|---|
-| `create_app()` | Instantiates `FastAPI`, attaches CORS middleware exposing `Content-Disposition`, and includes `health_router` and `media_router`. | Invoked in `main.py`. |
-| `run.py` | Launches `uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)`. | Entrypoint script. |
+#### `components/Spotify/`
+- **`SpotifyConnect.jsx`**: Displays connection prompt or connected account badge with disconnect button.
+- **`SpotifyPlaylists.jsx`**: Responsive grid of playlists with search filtering.
+- **`PlaylistTracksModal.jsx`**: Modal dialog for inspecting extracted tracks and choosing audio format.
+- **`BatchProgressCard.jsx`**: Live dashboard with progress bar, track counters, active song display, and audio preview buttons.
 
 ---
 
-## ⚛️ Frontend Architecture Specification
+## 🔒 Security & Multi-User Isolation
 
-### 1. `frontend/src/constants/index.js`
-**Purpose**: Global constants, platform enums, audio format definitions, and storage keys.
-
-| Constant | Description |
-|---|---|
-| `STORAGE_KEYS.HISTORY` | Local storage key for persistent download history (`tunefetch_download_history`). |
-| `AUDIO_FORMATS` | Array of format definitions (`mp3-320`, `mp3-256`, `mp3-128`, `best-audio`). |
-| `PLATFORMS` | Enum mapping (`spotify`, `youtube`, `soundcloud`, `generic`). |
-| `EXAMPLE_URLS` | Sample track/playlist URLs for quick UI testing. |
-
----
-
-### 2. `frontend/src/utils/formatters.js`
-**Purpose**: Presentation formatting helpers.
-
-| Function | Signature | Description |
-|---|---|---|
-| `formatDuration(seconds)` | `(number) -> string` | Converts seconds to `MM:SS` or `HH:MM:SS`. |
-| `formatFileSize(bytes)` | `(number) -> string` | Converts bytes to human readable `KB`, `MB`, or `GB`. |
-| `formatTimestamp(ts)` | `(number) -> string` | Converts Unix timestamp to localized `HH:MM` time. |
-| `sanitizeClientFilename(name, ext)` | `(string, string) -> string` | Ensures client-side file names have valid extensions. |
-
----
-
-### 3. `frontend/src/services/api.js`
-**Purpose**: Frontend HTTP client interacting with the backend REST endpoints.
-
-| Method | Signature | Description | Connected Endpoint |
-|---|---|---|---|
-| `getHealth()` | `() => Promise<Object>` | Queries server health status. | `GET /api/health` |
-| `fetchInfo(url)` | `(string) => Promise<Object>` | Fetches media metadata. | `POST /api/info` |
-| `startDownload(params)` | `(Object) => Promise<string>` | Dispatches download job, returns `task_id`. | `POST /api/download` |
-| `getStatus(taskId)` | `(string) => Promise<Object>` | Retrieves progress and state of task. | `GET /api/status/{taskId}` |
-| `getDownloadUrl(taskId, filename)` | `(string, string) => string` | Constructs URL preserving filename in path. | `GET /api/file/{taskId}/{filename}` |
-| `getStreamUrl(taskId)` | `(string) => string` | Constructs streaming playback URL. | `GET /api/stream/{taskId}` |
-
----
-
-### 4. `frontend/src/hooks/useLocalStorage.js`
-**Purpose**: Custom React hook for reactive, synchronized `localStorage` state.
-
-| Hook | Signature | Description |
-|---|---|---|
-| `useLocalStorage(key, initialValue)` | `(string, any) => [any, Function]` | Synchronizes component state with `window.localStorage` with JSON serialization. |
-
----
-
-### 5. `frontend/src/hooks/useDownloadTask.js`
-**Purpose**: Custom React hook encapsulating download lifecycle, background polling, and completion callbacks.
-
-| Hook / Return | Description | Connected To |
-|---|---|---|
-| `activeTask` | Current task object (`id`, `progress`, `speed`, `eta`, `status`, `filename`, `filesize`). | Rendered by `ProgressCard`. |
-| `activeTrackIndex` | Track ID currently being downloaded in a playlist. | Used by `PlaylistCard`. |
-| `error` | Error message string if download fails. | Rendered by `App.jsx`. |
-| `startDownload(params)` | Triggers download task via `api.startDownload` and starts interval polling. | Invoked by `MediaCard` and `PlaylistCard`. |
-| `resetTask()` | Clears active task state. | Invoked when dismissing progress. |
-
----
-
-### 6. Component Hierarchy & Interactions
-
-```
-App.jsx (Root Controller)
-├── Header.jsx (Branding, Health Indicator, History Toggle)
-├── HistoryDrawer.jsx (Recent Downloads Drawer, Audio Preview & Re-Download)
-├── UrlInput.jsx (URL Input, Platform Detection Badge, Quick Examples, Paste Button)
-├── ProgressCard.jsx (Live Animated Progress Bar, Speed, ETA, Save MP3 File Trigger)
-├── AudioPlayer.jsx (HTML5 Audio Player, Play/Pause, Scrubber, Volume Slider)
-├── MediaCard.jsx (Single Track Preview, Bitrate Quality Selector, Download Button)
-└── PlaylistCard.jsx (Playlist Overview, Search Filter, Single Track Download Actions)
-```
-
-#### Detailed Component Responsibilities:
-
-- **`Header.jsx`**:
-  - Displays TuneFetch logo and title.
-  - Automatically queries `/api/health` to render real-time engine readiness badges.
-  - Displays history item count badge.
-
-- **`UrlInput.jsx`**:
-  - Watches URL input to dynamically display platform tags (`SPOTIFY`, `YOUTUBE`, `SOUNDCLOUD`).
-  - Supports `navigator.clipboard.readText()` for single-click pasting.
-  - Exposes quick example buttons to test songs and playlists.
-
-- **`MediaCard.jsx`**:
-  - Displays cover art, title, artist, and duration badge.
-  - Allows selecting output quality (`MP3 • 320 kbps (Ultra HQ)`, `MP3 • 256 kbps`, `MP3 • 128 kbps`, `Original Stream`).
-  - Dispatches download requests.
-
-- **`PlaylistCard.jsx`**:
-  - Displays playlist artwork, title, and total track count.
-  - Includes real-time client-side search input to filter tracks by title or artist.
-  - Allows downloading individual tracks with independent progress indicators.
-
-- **`ProgressCard.jsx`**:
-  - Visualizes real-time progress (`0%` to `100%`) with animated multi-stop gradient bars.
-  - Displays dynamic status (`Downloading...`, `Extracting & Converting to MP3...`, `Completed`).
-  - Triggers celebratory confetti on completion.
-  - Renders direct "Save MP3 File" button that programmatically clicks a named download link for guaranteed `.mp3` extension preservation.
-
-- **`AudioPlayer.jsx`**:
-  - In-browser preview player using HTML5 `<audio>` element.
-  - Features real-time scrubber timeline, duration formatting, play/pause toggle, and interactive volume controls.
-
-- **`HistoryDrawer.jsx`**:
-  - Displays local download history.
-  - Allows instant re-download or browser preview of any previous track.
-  - Includes clear history functionality.
-
----
-
-## 🔗 Cross-Module Data & Control Flow
-
-| User Action | Frontend Function Flow | Backend Function Flow | Result |
-|---|---|---|---|
-| **Enter URL & click "Get Audio"** | `UrlInput.onSubmit` -> `App.handleFetchInfo` -> `api.fetchInfo(url)` | `routes.media.fetch_info` -> `services.downloader.get_info` -> `services.spotify_resolver` | Media metadata rendered in `MediaCard` or `PlaylistCard`. |
-| **Select 320 kbps & click "Download MP3"** | `MediaCard.handleDownloadClick` -> `useDownloadTask.startDownload` -> `api.startDownload` | `routes.media.start_download` -> `DownloadManager.create_download_task` | Background thread starts `yt-dlp` audio extraction and MP3 encoding. Returns `task_id`. |
-| **Download In-Progress** | `useDownloadTask` setInterval -> `api.getStatus(task_id)` | `routes.media.check_status` -> `DownloadManager.get_task_status` | Animated progress bar updates with %, speed, and ETA. |
-| **Download Finishes** | `useDownloadTask` detects `status == "completed"` -> triggers `onComplete` -> `App.handleTaskCompleted` | In-memory task updated with `filename` and `filepath`. | Item saved to `localStorage` history; Confetti fired. |
-| **Click "Save MP3 File"** | `ProgressCard.handleDirectDownload` creates `<a download="Title.mp3" href="/api/file/{id}/Title.mp3">` | `routes.media.download_file` -> `utils.sanitizer.build_content_disposition_header` | Browser downloads `.mp3` file with proper title and MIME type. |
-| **Click "Preview Audio"** | `ProgressCard.onPlayAudio` -> `App.setPlayingTrack` -> `AudioPlayer.useEffect` -> `api.getStreamUrl` | `routes.media.stream_audio` | Audio streams directly in HTML5 player. |
+1. **Token Protection at Rest**: All Spotify OAuth tokens are encrypted using **Fernet AES-128-CBC** before insertion into Neon PostgreSQL.
+2. **Client Secret Privacy**: Spotify Client Secret and Serper API Key never touch the browser; all communication occurs server-to-server.
+3. **Multi-User Partitioning**: Database records are keyed by `user_id`. One user cannot read or trigger downloads on another user's account or jobs.
+4. **Signed HTTP-Only Cookies**: Session cookies are signed with HMAC and protected against XSS.
