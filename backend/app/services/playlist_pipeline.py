@@ -222,9 +222,12 @@ class PlaylistPipeline:
                 except Exception as z_err:
                     logger.error(f"Error creating ZIP archive for job {job_id}: {z_err}", exc_info=True)
 
-            job.status = "COMPLETED"
+            if successful == 0 and failed > 0:
+                job.status = "FAILED"
+            else:
+                job.status = "COMPLETED"
             db.commit()
-            logger.info(f"Playlist job {job_id} completed: {successful} successful, {failed} failed out of {processed}.")
+            logger.info(f"Playlist job {job_id} finished: {successful} successful, {failed} failed out of {processed}.")
         except Exception as e:
             logger.error(f"Fatal error in playlist pipeline {job_id}: {e}", exc_info=True)
             if job:
@@ -276,6 +279,13 @@ class PlaylistPipeline:
         elif job.status == "COMPLETED":
             eta_seconds = 0
 
+        job_error = None
+        if job.status == "FAILED":
+            for t in tracks_list:
+                if t.get("status") == "FAILED" and t.get("reason"):
+                    job_error = t.get("reason")
+                    break
+
         return {
             "id": job.id,
             "playlist_id": job.playlist_id,
@@ -285,6 +295,7 @@ class PlaylistPipeline:
             "successful_tracks": job.successful_tracks,
             "failed_tracks": job.failed_tracks,
             "status": job.status,
+            "error": job_error,
             "current_track": current_track,
             "eta_seconds": eta_seconds,
             "zip_available": has_zip,

@@ -66,63 +66,64 @@ class SerperService:
             except Exception as db_err:
                 logger.warning(f"Error reading from resolved_songs DB cache: {db_err}")
 
+        # If not cached, SERPER_API_KEY is strictly required to resolve candidate streams
+        if not SERPER_API_KEY or not SERPER_API_KEY.strip():
+            err_msg = "Serper API key is missing and will not be able to proceed further. Sorry, please provide me one."
+            logger.error(err_msg)
+            raise ValueError(err_msg)
+
         # Step 2: Query Serper API
         query = SerperService.construct_search_query(clean_song, clean_artist)
         candidate_url = None
 
-        if not SERPER_API_KEY:
-            fallback_query = f"{clean_song} {clean_artist} audio".strip()
-            logger.info(f"SERPER_API_KEY not configured. Defaulting to ytsearch: '{fallback_query}'")
-            candidate_url = f"ytsearch1:{fallback_query}"
-        else:
-            try:
-                headers = {
-                    "X-API-KEY": SERPER_API_KEY,
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "q": query,
-                    "num": 5
-                }
+        try:
+            headers = {
+                "X-API-KEY": SERPER_API_KEY.strip(),
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "q": query,
+                "num": 5
+            }
 
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(
-                        "https://google.serper.dev/search",
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    "https://google.serper.dev/search",
+                    headers=headers,
+                    json=payload
+                )
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("organic", []):
+                        link = item.get("link", "")
+                        if YOUTUBE_WATCH_REGEX.search(link):
+                            logger.info(f"Serper resolved candidate URL for '{query}': {link}")
+                            candidate_url = link
+                            break
+
+                # Secondary fallback: video search endpoint
+                if not candidate_url:
+                    video_resp = await client.post(
+                        "https://google.serper.dev/videos",
                         headers=headers,
-                        json=payload
+                        json={"q": f"{clean_song} {clean_artist} audio", "num": 5}
                     )
-
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        for item in data.get("organic", []):
-                            link = item.get("link", "")
+                    if video_resp.status_code == 200:
+                        v_data = video_resp.json()
+                        for v in v_data.get("videos", []):
+                            link = v.get("link", "")
                             if YOUTUBE_WATCH_REGEX.search(link):
-                                logger.info(f"Serper resolved candidate URL for '{query}': {link}")
+                                logger.info(f"Serper video endpoint resolved candidate URL for '{query}': {link}")
                                 candidate_url = link
                                 break
 
-                    # Secondary fallback: video search endpoint
-                    if not candidate_url:
-                        video_resp = await client.post(
-                            "https://google.serper.dev/videos",
-                            headers=headers,
-                            json={"q": f"{clean_song} {clean_artist} audio", "num": 5}
-                        )
-                        if video_resp.status_code == 200:
-                            v_data = video_resp.json()
-                            for v in v_data.get("videos", []):
-                                link = v.get("link", "")
-                                if YOUTUBE_WATCH_REGEX.search(link):
-                                    logger.info(f"Serper video endpoint resolved candidate URL for '{query}': {link}")
-                                    candidate_url = link
-                                    break
-
-            except Exception as e:
-                logger.warning(f"Serper API query failed for '{query}': {e}. Falling back to ytsearch.")
+        except Exception as e:
+            logger.error(f"Serper API query failed for '{query}': {e}")
+            raise RuntimeError(f"Serper API query failed for '{query}': {e}")
 
         if not candidate_url:
-            fallback_query = f"{clean_song} {clean_artist} audio".strip()
-            candidate_url = f"ytsearch1:{fallback_query}"
+            raise RuntimeError(f"Could not resolve candidate audio URL for '{clean_song}' by '{clean_artist}'.")
 
         # Step 3: Cache the resolved URL into PostgreSQL database
         if db and candidate_url:

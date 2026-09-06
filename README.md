@@ -39,7 +39,7 @@ Once converted, playlists can be saved **directly into a real Windows folder on 
    - [Strict Multi-User Isolation](#strict-multi-user-isolation)
 5. [📜 Large Playlist Pagination Engine (1,400+ Tracks)](#-large-playlist-pagination-engine-1400-tracks)
 6. [🐘 Global PostgreSQL Song Resolution Cache (`resolved_songs`)](#-global-postgresql-song-resolution-cache-resolved_songs)
-7. [🔍 Candidate URL Resolution (Serper & Fallback)](#-candidate-url-resolution-serper--fallback)
+7. [🔍 Candidate URL Resolution (Serper API)](#-candidate-url-resolution-serper-api)
 8. [⚙️ yt-dlp Downloader Engine & Resource Management](#️-yt-dlp-downloader-engine--resource-management)
 9. [📁 Direct PC Folder Saving (`folderSaver.js`)](#-direct-pc-folder-saving-foldersaverjs)
 10. [🛠️ Step-by-Step Setup & Run Guide](#️-step-by-step-setup--run-guide)
@@ -63,7 +63,7 @@ Once converted, playlists can be saved **directly into a real Windows folder on 
 - 🐘 **Neon PostgreSQL Global Caching (`resolved_songs`)**: Every song URL discovered is permanently cached in PostgreSQL, matching by both cleaned `song_name` and `artist_name`. Repeated downloads across any user completely bypass Serper API calls in `< 5ms`.
 - ⏱️ **Live ETA Countdown & Job Persistence**: Calculates real-time completion countdown. Users can close the page, do other tasks, and return later; the session automatically reconnects to their active or completed folder.
 - 📜 **Full Pagination Engine**: Effortlessly extracts playlists containing **10, 100, 500, or 1,400+ tracks** without memory bottlenecks or missing tracks.
-- 🔍 **Serper Candidate Resolution**: Automated high-speed search resolution using Serper API (`Song + Artist audio`) to find the best candidate audio stream, with seamless `ytsearch1:` fallback.
+- 🔍 **Serper Candidate Resolution**: Automated high-speed search resolution using Serper API (`Song + Artist audio`) to find the best candidate audio stream. If `SERPER_API_KEY` is missing, the system strictly halts without resorting to yt-search and prompts the user to provide an API key.
 - 🛡️ **Zero-Disk-Accumulation Architecture**: Once a user downloads an audio file, it is automatically purged from the server via FastAPI `BackgroundTasks` to guarantee zero persistent server disk usage.
 - ⚡ **High-Throughput Concurrency Throttling**: Employs a bounded worker pool (`ThreadPoolExecutor`) to smoothly handle concurrent download requests without CPU, bandwidth, or memory exhaustion.
 - 🔄 **Continuous Background Garbage Collector (GC)**: An autonomous background daemon sweeps temporary files and purges abandoned or un-downloaded files older than 2 hours.
@@ -248,7 +248,7 @@ TuneFetch/
 │   │   └── __init__.py
 │   ├── downloads/                   # Temporary directory for converted audio files
 │   ├── tests/
-│   │   └── test_spotify_pipeline.py # 9 automated tests for the full pipeline
+│   │   └── test_spotify_pipeline.py # 10 automated tests for the full pipeline
 │   ├── requirements.txt             # Python backend dependencies
 │   └── run.py                       # Backend server launcher with auto-venv detection
 │
@@ -320,7 +320,7 @@ TuneFetch/
 - Two-tier candidate resolution:
   1. Checks `resolved_songs` table for exact match on clean `song_name` and `artist_name`.
   2. If missing, queries Serper API (`site:youtube.com/watch "song" "artist"`), then saves to DB.
-  3. Seamless `ytsearch1:` fallback if Serper is unconfigured.
+  3. If Serper API key is missing, halts execution with an explicit error and will not proceed with yt-search.
 
 #### `services/playlist_pipeline.py`
 - Asynchronous batch worker thread sequentially processing tracks:
@@ -448,14 +448,15 @@ When downloading music, popular songs are downloaded repeatedly across different
 
 ---
 
-## 🔍 Candidate URL Resolution (Serper & Fallback)
+## 🔍 Candidate URL Resolution (Serper API)
 
 Once track names and artists are extracted (and after cache check):
 
 1. Builds precise search query: `"{Title} {Artists} audio"`
 2. Queries the **Serper API** (`https://google.serper.dev/videos` or `https://google.serper.dev/search`).
 3. Filters for valid media domain links (e.g. `youtube.com/watch?v=...` or `music.youtube.com/...`).
-4. **Fallback Mode**: If `SERPER_API_KEY` is not provided or quota is exceeded, seamlessly returns `ytsearch1:{query}`.
+4. **Mandatory Serper Key Policy**: If `SERPER_API_KEY` is missing or unconfigured, the system does **not** fall back to `ytsearch`. It immediately stops and returns an explicit alert to the user:
+   > *"Serper API key is missing and will not be able to proceed further. Sorry, please provide me one."*
 
 ---
 
@@ -640,7 +641,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 ## 🧪 Automated Testing Suite
 
-To run the complete 9-test automated suite (testing PKCE generation, Fernet token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, Serper resolution, Neon PostgreSQL caching, and multi-user isolation):
+To run the complete 10-test automated suite (testing PKCE generation, Fernet token encryption at rest, automatic token refreshing, 1,400+ playlist pagination, Serper resolution, Neon PostgreSQL caching, multi-user isolation, and missing Serper key rejection):
 
 From the project root:
 
@@ -689,7 +690,8 @@ pytest tests/test_spotify_pipeline.py
 - **Fix**: Ensure your `DATABASE_URL` ends with `?sslmode=require`.
 
 ### ❌ Serper API Key Missing
-- **Behavior**: If `SERPER_API_KEY` is not provided, TuneFetch automatically switches to `ytsearch1:` fallback mode so downloads continue seamlessly.
+- **Behavior**: If `SERPER_API_KEY` is missing or unconfigured, TuneFetch will not proceed with yt-search. It returns an HTTP 400 response with the message: *"Serper API key is missing and will not be able to proceed further. Sorry, please provide me one."*
+- **Fix**: Sign up at [serper.dev](https://serper.dev), generate an API key, and configure `SERPER_API_KEY=your_key_here` in `backend/.env`.
 
 ### ❌ Session Cookie in Cross-Origin environments
 - **Fix**: Ensure the frontend Vite proxy routes `/spotify` and `/api` to the backend server with `credentials: 'include'`.

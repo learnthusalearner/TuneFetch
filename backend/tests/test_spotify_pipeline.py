@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
 from app.models.db_models import User, SpotifyAccount, PlaylistDownloadJob
-from app.utils.auth_helper import encrypt_token, decrypt_token
+from app.utils.auth_helper import encrypt_token, decrypt_token, sign_session_id, SESSION_COOKIE_NAME
 from app.services.spotify_service import SpotifyService, _pkce_store
 from app.services.serper_service import SerperService
 from app.services.playlist_pipeline import PlaylistPipeline
@@ -162,10 +162,11 @@ def test_serper_service_search_and_fallback():
                 url = await SerperService.find_best_audio_url("Blinding Lights", ["The Weeknd"])
                 assert url == "https://www.youtube.com/watch?v=4NRXx6U8ABQ"
 
-        # Test fallback when Serper is not configured
+        # Test error when Serper is not configured (no ytsearch fallback)
         with patch("app.services.serper_service.SERPER_API_KEY", ""):
-            fallback_url = await SerperService.find_best_audio_url("Blinding Lights", ["The Weeknd"])
-            assert fallback_url == "ytsearch1:Blinding Lights The Weeknd audio"
+            with pytest.raises(ValueError) as exc_info:
+                await SerperService.find_best_audio_url("Blinding Lights", ["The Weeknd"])
+            assert "Serper API key is missing and will not be able to proceed further. Sorry, please provide me one." in str(exc_info.value)
 
     asyncio.run(_test())
 
@@ -334,5 +335,32 @@ def test_spotify_account_relogin_duplicate_handling(db_session):
 
     asyncio.run(_test())
 
+# 10. Test Missing SERPER_API_KEY blocks download with exact user message
+def test_missing_serper_key_blocks_download(db_session):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.database import get_db
 
+    user = User(id="user-no-serper")
+    db_session.add(user)
+    db_session.commit()
 
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        token = sign_session_id(user.id)
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+
+        with patch("app.routes.spotify.SERPER_API_KEY", ""):
+            resp = client.post("/spotify/playlists/pl_123/download", json={"format": "mp3-320"})
+            assert resp.status_code == 400
+            data = resp.json()
+            assert "Serper API key is missing and will not be able to proceed further. Sorry, please provide me one." in data["detail"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)

@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from app.core.config import FRONTEND_URL
+from app.core.config import FRONTEND_URL, SERPER_API_KEY
 from app.core.database import get_db
 from app.models.db_models import User, SpotifyAccount, PlaylistDownloadJob
 from app.utils.auth_helper import get_current_user, sign_session_id, SESSION_COOKIE_NAME
@@ -166,6 +166,12 @@ async def trigger_playlist_download(
     Initiates asynchronous batch download pipeline:
     Spotify Track -> Serper API -> Candidate URL -> EXISTING yt-dlp Downloader.
     """
+    if not SERPER_API_KEY or not SERPER_API_KEY.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Serper API key is missing and will not be able to proceed further. Sorry, please provide me one."
+        )
+
     job_id = await PlaylistPipeline.create_and_start_job(
         user_id=current_user.id,
         playlist_id=playlist_id,
@@ -187,11 +193,17 @@ async def download_single_spotify_track(
     2. If not found, calls Serper API and caches resolved candidate in PostgreSQL.
     3. Initiates single download via existing DownloadManager.
     """
-    candidate_url = await SerperService.find_best_audio_url(
-        song_name=req.song_name,
-        artists=req.artist_name,
-        db=db
-    )
+    try:
+        candidate_url = await SerperService.find_best_audio_url(
+            song_name=req.song_name,
+            artists=req.artist_name,
+            db=db
+        )
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not resolve track: {exc}")
+
     task_id = DownloadManager.create_download_task(
         url=candidate_url,
         format_type=req.format or "mp3-320",
