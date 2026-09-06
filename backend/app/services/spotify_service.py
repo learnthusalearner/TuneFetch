@@ -73,7 +73,8 @@ class SpotifyService:
             "show_dialog": "true"
         }
 
-        query_string = "&".join(f"{k}={httpx.URL('', params={k: v}).query.decode()}" for k, v in params.items())
+        import urllib.parse
+        query_string = urllib.parse.urlencode(params)
         return f"https://accounts.spotify.com/authorize?{query_string}"
 
     @staticmethod
