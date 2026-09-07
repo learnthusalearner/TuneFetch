@@ -1,0 +1,219 @@
+/* ================= HEADER ================= */
+
+.site-header {
+  position: relative;
+  overflow: hidden;
+
+  width: 100%;
+
+  background:
+    linear-gradient(
+      110deg,
+      #091225 0%,
+      #0b1020 48%,
+      #11152b 100%
+    );
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* soft glow blobs behind the nav, like in the screenshot */
+.site-header::before,
+.site-header::after {
+  content: '';
+  position: absolute;
+  top: -90px;
+  width: 320px;
+  height: 260px;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.site-header::before {
+  left: 8%;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.35), transparent 70%);
+}
+
+.site-header::after {
+  left: 34%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.28), transparent 70%);
+}
+
+.header-inner {
+  position: relative;
+  z-index: 1;
+
+  width: min(100%, 1600px);
+  box-sizing: border-box;
+
+  margin: 0 auto;
+  padding: 22px 48px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 32px;
+}
+
+/* ---- brand (pushed to the far right) ---- */
+.brand {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f97316, #ec4899, #a855f7, #3b82f6);
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
+  flex-shrink: 0;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brand-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+/* tagline isn't shown in the header screenshot */
+.brand-tagline {
+  display: none;
+}
+
+/* ---- nav (left side) ---- */
+.main-nav {
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  background: transparent;
+  border: none;
+
+  color: #d0d5dd;
+
+  font-size: 17px;
+  font-weight: 500;
+
+  padding: 12px 18px;
+
+  border-radius: 10px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  color: #ffffff;
+}
+
+.nav-link.active {
+  background: #1d2939;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.nav-link:hover {
+  color: #ffffff;
+}
+
+.nav-link.active {
+  background: #1e293b;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ---- right-side actions (engine status + history), hugs the brand ---- */
+.header-actions {
+  order: 2;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.engine-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.engine-status.ready {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+.engine-status.offline {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.history-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.history-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+/* ---- responsive ---- */
+@media (max-width: 900px) {
+  .header-inner {
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    gap: 14px;
+  }
+  .header-actions {
+    margin-left: 0;
+  }
+  .brand-name {
+    font-size: 22px;
+  }
+}
