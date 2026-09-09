@@ -17,7 +17,7 @@ export const isDirectoryPickerSupported = () => {
  * @param {Function} onProgress - Callback for progress: ({ current, total, filename })
  * @returns {Promise<{ folderName: string, fileCount: number }>}
  */
-export async function saveZipAsFolder(blob, folderName = 'Thanks_for_downloading', onProgress = null) {
+export async function saveZipAsFolder(blob, folderName = 'TuneFetch_Music', onProgress = null) {
   if (!isDirectoryPickerSupported()) {
     throw new Error('Direct folder saving is not supported in this browser. Please use the ZIP download option.');
   }

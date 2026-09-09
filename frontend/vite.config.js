@@ -29,6 +29,18 @@ const safeUriPlugin = () => ({
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [safeUriPlugin(), react()],
+  build: {
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-motion': ['motion/react'],
+          'vendor-react':  ['react', 'react-dom'],
+          'vendor-lucide': ['lucide-react'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

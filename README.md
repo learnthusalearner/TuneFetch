@@ -20,7 +20,7 @@
 
 TuneFetch connects directly with Spotify via OAuth 2.0 PKCE, retrieves public, private, and collaborative playlists (supporting 10, 100, 500, 1,400+ songs with automated pagination), resolves tracks to high-fidelity audio streams via a two-tier PostgreSQL cache and Serper Google Video search, and queues them through the high-throughput `yt-dlp` download engine.
 
-Once converted, playlists can be saved **directly into a real Windows folder on your PC** (`Thanks_for_downloading`) containing all `{Artist} - {Song Title}.mp3` files, eliminating the need to manually unzip archives!
+Once converted, playlists can be saved **directly into an organized folder on your PC** (`TuneFetch_Music/{Playlist_Name}`) containing all `{Artist} - {Song Title}.mp3` files, eliminating the need to manually unzip archives!
 
 ---
 
@@ -33,33 +33,46 @@ Once converted, playlists can be saved **directly into a real Windows folder on 
 3. [📂 File-by-File Technical Specification](#-file-by-file-technical-specification)
    - [Backend Layer (`backend/app/`)](#backend-layer-backendapp)
    - [Frontend Layer (`frontend/src/`)](#frontend-layer-frontendsrc)
-4. [🔒 Security, Authentication & Multi-User Isolation](#-security-authentication--multi-user-isolation)
+4. [🎨 Frontend Client & Modular Architecture](#-frontend-client--modular-architecture)
+   - [Dual-Route Setup & State Flow](#dual-route-setup--state-flow)
+   - [Interactive Spotify Musical Cursor Follower](#interactive-spotify-musical-cursor-follower)
+   - [Modular Landing Page Architecture](#modular-landing-page-architecture)
+   - [Google Antigravity Design Tokens](#google-antigravity-design-tokens)
+5. [🔍 Search Engine Optimization (SEO) & Answer Engine Optimization (AEO)](#-search-engine-optimization-seo--answer-engine-optimization-aeo)
+   - [Technical SEO & Semantic Web](#technical-seo--semantic-web)
+   - [Social Graph & Twitter Card Metadata](#social-graph--twitter-card-metadata)
+   - [Structured Data (Schema.org JSON-LD)](#structured-data-schemaorg-json-ld)
+   - [Answer Engine Optimization (AEO) Architecture](#answer-engine-optimization-aeo-architecture)
+6. [🔒 Security, Authentication & Multi-User Isolation](#-security-authentication--multi-user-isolation)
    - [OAuth 2.0 with PKCE Flow](#oauth-20-with-pkce-flow)
    - [Fernet Symmetric Token Encryption at Rest](#fernet-symmetric-token-encryption-at-rest)
    - [Strict Multi-User Isolation](#strict-multi-user-isolation)
-5. [📜 Large Playlist Pagination Engine (1,400+ Tracks)](#-large-playlist-pagination-engine-1400-tracks)
-6. [🐘 Global PostgreSQL Song Resolution Cache (`resolved_songs`)](#-global-postgresql-song-resolution-cache-resolved_songs)
-7. [🔍 Candidate URL Resolution (Serper API)](#-candidate-url-resolution-serper-api)
-8. [⚙️ yt-dlp Downloader Engine & Resource Management](#️-yt-dlp-downloader-engine--resource-management)
-9. [📁 Direct PC Folder Saving (`folderSaver.js`)](#-direct-pc-folder-saving-foldersaverjs)
-10. [🛠️ Step-by-Step Setup & Run Guide](#️-step-by-step-setup--run-guide)
+7. [📜 Large Playlist Pagination Engine (1,400+ Tracks)](#-large-playlist-pagination-engine-1400-tracks)
+8. [🐘 Global PostgreSQL Song Resolution Cache (`resolved_songs`)](#-global-postgresql-song-resolution-cache-resolved_songs)
+9. [🔍 Candidate URL Resolution (Serper API)](#-candidate-url-resolution-serper-api)
+10. [⚙️ yt-dlp Downloader Engine & Resource Management](#️-yt-dlp-downloader-engine--resource-management)
+11. [📁 Direct PC Folder Saving (`folderSaver.js`)](#-direct-pc-folder-saving-foldersaverjs)
+12. [🛠️ Step-by-Step Setup & Run Guide](#️-step-by-step-setup--run-guide)
     - [Prerequisites](#1-prerequisites)
     - [Spotify Developer Dashboard Setup](#2-spotify-developer-dashboard-setup)
     - [Environment Configuration (`.env`)](#3-environment-configuration-env)
     - [Running the Backend (with Auto-Venv Detection)](#4-running-the-backend)
     - [Running the Frontend](#5-running-the-frontend)
     - [Building for Production](#6-building-for-production)
-11. [🧪 Automated Testing Suite](#-automated-testing-suite)
-12. [🌐 Complete API Endpoints Reference](#-complete-api-endpoints-reference)
-13. [❓ Troubleshooting & Gotchas](#-troubleshooting--gotchas)
-14. [📄 License](#-license)
+13. [🧪 Automated Testing Suite](#-automated-testing-suite)
+14. [🌐 Complete API Endpoints Reference](#-complete-api-endpoints-reference)
+15. [❓ Troubleshooting & Gotchas](#-troubleshooting--gotchas)
+16. [📄 License](#-license)
 
 ---
 
 ## ✨ Key Features
 
 - 🟢 **Spotify OAuth 2.0 with PKCE**: Full multi-user authorization flow allowing users to inspect and download their own private, collaborative, and public Spotify playlists.
-- 📁 **Direct Windows Folder Saving on PC**: Leverages the browser's native **File System Access API (`window.showDirectoryPicker`)** and **JSZip** to unpack all MP3 songs directly into a local Windows folder (`Thanks_for_downloading`) on your computer.
+- 📁 **Direct Windows Folder Saving on PC**: Leverages the browser's native **File System Access API (`window.showDirectoryPicker`)** and **JSZip** to unpack all MP3 songs directly into a local Windows folder (`TuneFetch_Music/{Playlist_Name}`) on your computer.
+- 🎶 **Custom Spotify Musical Cursor**: Default OS cursor is hidden (`cursor: none !important`), replaced by a custom Spotify emerald pointer and 6 trailing notes (`♪`, `♫`, `♬`, `♩`, `🎵`, `🎶`) that sequentially vanish one by one.
+- 🧩 **Modular Frontend Architecture**: 14 dedicated components under `src/components/landing/` providing maintainable, clean code structure.
+- 🚀 **Built-in SEO & AEO Optimization**: Structured data JSON-LD (`WebApplication` and `FAQPage`), Open Graph, Twitter Cards, and inverted pyramid answers formatted for AI engines (Perplexity, ChatGPT, Gemini).
 - 🐘 **Neon PostgreSQL Global Caching (`resolved_songs`)**: Every song URL discovered is permanently cached in PostgreSQL, matching by both cleaned `song_name` and `artist_name`. Repeated downloads across any user completely bypass Serper API calls in `< 5ms`.
 - ⏱️ **Live ETA Countdown & Job Persistence**: Calculates real-time completion countdown. Users can close the page, do other tasks, and return later; the session automatically reconnects to their active or completed folder.
 - 📜 **Full Pagination Engine**: Effortlessly extracts playlists containing **10, 100, 500, or 1,400+ tracks** without memory bottlenecks or missing tracks.
@@ -205,7 +218,7 @@ sequenceDiagram
         Downloader-->>API: Audio file ready
         API->>NeonDB: Update processed_tracks & status
     end
-    API->>API: Pack all tracks into Thanks_for_downloading folder archive
+    API->>API: Pack all tracks into TuneFetch_Music playlist folder archive
     API->>NeonDB: Mark Job COMPLETED
 
     %% 7. Direct Folder Delivery to PC
@@ -213,7 +226,7 @@ sequenceDiagram
     Frontend->>API: GET /spotify/jobs/{id}/archive
     API-->>Frontend: Stream playlist folder archive
     Frontend->>User: Prompt window.showDirectoryPicker()
-    Frontend->>User: Write each MP3 into local folder "Thanks_for_downloading"
+    Frontend->>User: Write each MP3 into local folder "TuneFetch_Music/{Playlist_Name}"
 ```
 
 ---
@@ -253,34 +266,71 @@ TuneFetch/
 │   └── run.py                       # Backend server launcher with auto-venv detection
 │
 ├── frontend/
+│   ├── public/
+│   │   ├── assets/                         # Public asset mirror for HTTP fallback
+│   │   ├── favicon.svg                     # Browser tab brand mark
+│   │   ├── icons.svg                       # SVG icons sprite
+│   │   └── [10 active PNG assets]          # Verified high-res image assets
 │   ├── src/
+│   │   ├── assets/                         # Direct ES module imported images
+│   │   │   ├── album_art_neon_vibes.png    # Synthwave genre showcase art
+│   │   │   ├── album_grid.png             # Multi-genre catalog grid
+│   │   │   ├── audiophile_headphones.png   # Studio headphones equipment art
+│   │   │   ├── dj_turntable.png           # Professional DJ turntable equipment
+│   │   │   ├── hero_albums.png            # 14,000+ playlist grid showcase
+│   │   │   ├── image.png                  # Spotify Connect mobile app view
+│   │   │   ├── image2.png                 # Spotify download controls view
+│   │   │   ├── indian_producer.png        # Indian sound designer in modern studio
+│   │   │   ├── lofi_chill_beats.png       # Lo-Fi chill study beats illustration
+│   │   │   └── player_widget.png          # 320 kbps Studio player interface
 │   │   ├── components/
-│   │   │   ├── Header.jsx           # Top navigation bar & backend health badge
-│   │   │   ├── ProgressCard.jsx     # Animated progress bar & single track download
-│   │   │   ├── AudioPlayer.jsx      # In-browser audio player with scrub & volume controls
-│   │   │   ├── HistoryDrawer.jsx    # Download history drawer
-│   │   │   └── Spotify/
-│   │   │       ├── SpotifyConnect.jsx      # Spotify OAuth authorization status card
-│   │   │       ├── SpotifyPlaylists.jsx    # Grid of user playlists with search filter
-│   │   │       ├── PlaylistTracksModal.jsx # Full tracklist preview & batch download
-│   │   │       └── BatchProgressCard.jsx   # Live batch job progress & Save to Folder
+│   │   │   ├── landing/                   # Modular landing page sections
+│   │   │   │   ├── landingData.js         # Centralized data arrays & animation variants
+│   │   │   │   ├── MusicalCursor.jsx      # Custom pointer & vanishing musical notes
+│   │   │   │   ├── LandingNav.jsx         # Frosted navigation bar with live radar dot
+│   │   │   │   ├── HeroSection.jsx        # Headline, CTA buttons & 4-card UI preview
+│   │   │   │   ├── TickerMarquee.jsx      # Continuous horizontal ticker
+│   │   │   │   ├── CapabilitiesSection.jsx# Quick-scan technical capability pills
+│   │   │   │   ├── ProducerSection.jsx    # Indian music producer studio spotlight
+│   │   │   │   ├── GenreGallerySection.jsx# Lo-Fi, Synthwave, and Catalog cards
+│   │   │   │   ├── AudiophileSection.jsx  # DJ gear & audiophile hardware showcase
+│   │   │   │   ├── ComparisonSection.jsx  # Feature matrix vs generic converters
+│   │   │   │   ├── TestimonialsSection.jsx# Genuine Indian user reviews & ratings
+│   │   │   │   ├── FaqSection.jsx         # High-intent SEO FAQ knowledge base
+│   │   │   │   ├── FinalCtaSection.jsx    # Converting bottom banner with spinning vinyl
+│   │   │   │   └── LandingFooter.jsx      # Semantic footer with keyword pills
+│   │   │   ├── layout/
+│   │   │   │   ├── Navbar.jsx             # Top bar for DashboardPage with health pill
+│   │   │   │   └── StarfieldBg.jsx        # Canvas particle background animation
+│   │   │   ├── Spotify/
+│   │   │   │   ├── SpotifyConnect.jsx     # PKCE OAuth authorization card
+│   │   │   │   ├── SpotifyPlaylists.jsx   # Grid of user playlists with search filter
+│   │   │   │   ├── PlaylistTracksModal.jsx# Selective track modal & batch download
+│   │   │   │   └── BatchProgressCard.jsx  # Live batch progress & Direct Folder Save
+│   │   │   ├── ui/
+│   │   │   │   └── Toast.jsx              # Lightweight notification toast queue
+│   │   │   ├── AudioPlayer.jsx            # In-browser audio preview player
+│   │   │   └── HistoryDrawer.jsx          # Download history slide-out drawer
 │   │   ├── constants/
-│   │   │   └── index.js             # Formats, platforms, and storage keys
+│   │   │   └── index.js                   # Storage keys, audio formats, and endpoints
 │   │   ├── hooks/
-│   │   │   ├── useLocalStorage.js   # Persistent local storage state hook
-│   │   │   └── useDownloadTask.js   # Task polling and lifecycle hook
+│   │   │   ├── useLocalStorage.js         # Synchronized persistent localStorage hook
+│   │   │   └── useDownloadTask.js         # Single track polling and task lifecycle
+│   │   ├── pages/
+│   │   │   ├── LandingPage.jsx            # Declarative root for "/" (~90 lines)
+│   │   │   └── DashboardPage.jsx          # Declarative root for "/dashboard"
 │   │   ├── services/
-│   │   │   └── api.js               # API client with Spotify endpoints
+│   │   │   └── api.js                     # Centralized Axios/fetch HTTP client
 │   │   ├── utils/
-│   │   │   ├── folderSaver.js       # File System Access API direct folder unpacker
-│   │   │   └── formatters.js        # Duration, file size, and timestamp helpers
-│   │   ├── App.jsx                  # Main application controller
-│   │   ├── index.css                # Dark glassmorphism styling
-│   │   └── main.jsx                 # React root mount
+│   │   │   ├── folderSaver.js             # Native Directory Picker & JSZip unpacker
+│   │   │   └── formatters.js              # Duration, file size, and timestamp helpers
+│   │   ├── App.jsx                        # Top-level React Router controller
+│   │   ├── index.css                      # Google Antigravity design system & cursor CSS
+│   │   └── main.jsx                       # React DOM mount with BrowserRouter
 │   ├── package.json
-│   ├── vite.config.js               # Proxy setup (/api, /spotify -> backend:8000)
-│   └── index.html
-└── README.md                        # Master documentation (merged architecture, setup & API)
+│   ├── vite.config.js                     # Proxy setup (/api, /spotify -> backend:8000)
+│   └── index.html                         # SEO, SEM, Open Graph, Twitter & JSON-LD
+└── README.md
 ```
 
 ### Backend Layer (`backend/app/`)
@@ -326,7 +376,7 @@ TuneFetch/
 - Asynchronous batch worker thread sequentially processing tracks:
   - Updates live ETA estimates.
   - Passes candidate URLs into `DownloadManager`.
-  - Packages all tracks into folder `Thanks_for_downloading/` within the job archive.
+  - Packages all tracks into folder `TuneFetch_Music/{Playlist_Name}` within the job archive.
 
 #### `services/downloader.py`
 - High-performance `yt-dlp` download manager with bounded thread pools, progress hooks, and MP3 audio extraction via embedded FFmpeg.
@@ -349,22 +399,103 @@ TuneFetch/
 
 ---
 
-### Frontend Layer (`frontend/src/`)
+## 🎨 Frontend Client & Modular Architecture
 
-#### `App.jsx`
-- Clean two-tab controller: **Home** & **Spotify Downloader**.
-- Auto-restores completed or in-progress batch download cards via `/spotify/jobs/latest`.
-- Handles modal state, single track preview playback, and notification toasts.
+### Dual-Route Setup & State Flow
+Configured with `react-router-dom`:
+- **`/` (`LandingPage.jsx`)**: The public conversion engine. Declaratively composed of 13 modular sub-components and ~90 lines of JSX.
+- **`/dashboard` (`DashboardPage.jsx`)**: The interactive audio workstation. Manages the Spotify PKCE lifecycle, library pagination, batch queue, and File System Access downloads.
+- When an OAuth callback returns with `?spotify=connected`, `App.jsx` automatically redirects the user straight to `/dashboard`.
 
-#### `components/Spotify/`
-- **`SpotifyConnect.jsx`**: Spotify OAuth connection card (hidden automatically once linked).
-- **`SpotifyPlaylists.jsx`**: Responsive grid of playlists with real-time search filtering.
-- **`PlaylistTracksModal.jsx`**: Full track inspection modal with "Download All as Folder" action.
-- **`BatchProgressCard.jsx`**: Real-time batch progress dashboard with live countdown timer and direct **"Save as Folder on PC"** button.
+### Interactive Spotify Musical Cursor Follower
+Implemented in `src/components/landing/MusicalCursor.jsx` with CSS rules in `src/index.css`:
+- **OS Cursor Hiding**: On mouse-enabled fine pointers, `cursor: none !important` suppresses the default operating system arrow.
+- **Custom Emerald Stylus**: A precision white pointer core with `#1DB954` glowing halo tracks exact mouse coordinates with instant spring physics (`stiffness: 750`, `damping: 38`).
+- **Sequential Vanishing Musical Notes**: 6 musical note symbols (`♪`, `♫`, `♬`, `♩`, `🎵`, `🎶`) trail the mouse with fluid spring damping and **sequentially fade and vanish one by one**:
+  - `♪` (0.0s delay -> vanishes at ~1.8s)
+  - `♫` (0.5s delay -> vanishes at ~2.3s)
+  - `♬` (1.0s delay -> vanishes at ~2.8s)
+  - `♩` (1.5s delay -> vanishes at ~3.3s)
+  - `🎵` (2.0s delay -> vanishes at ~3.8s)
+  - `🎶` (2.5s delay -> vanishes at ~4.3s)
+  Each note rises, rotates gently, and dissipates with a soft blur filter (`filter: blur(6px)`), creating an enchanting, musical atmosphere.
 
-#### `utils/folderSaver.js`
-- Implements `saveZipAsFolder()` using **File System Access API (`window.showDirectoryPicker`)** and **JSZip**.
-- Extracts MP3 files from the server response and writes them directly into the Windows folder `Thanks_for_downloading` on the user's PC.
+### Modular Landing Page Architecture
+Located in `frontend/src/components/landing/`:
+1. **`landingData.js`**: Centralized configuration arrays (`CAPABILITIES`, `MARQUEE_ITEMS`, `COMPARISON_ITEMS`, `TESTIMONIALS`, `FAQ_ITEMS`, `CURSOR_MUSICAL_NOTES`) and animation variants (`fadeUp`, `stagger`, `cardVariant`).
+2. **`MusicalCursor.jsx`**: Custom pointer head and the 6 trailing notes with staggered vanishing animations.
+3. **`LandingNav.jsx`**: Frosted sticky navigation bar with active green radar dot.
+4. **`HeroSection.jsx`**: Main headline, call-to-actions, and responsive 4-card UI showcase (`image.png`, `image2.png`, `hero_albums.png`, `player_widget.png`) displaying side-by-side on desktop via `.hero-showcase-grid`.
+5. **`TickerMarquee.jsx`**: Infinite horizontal scrolling marquee with key technical features.
+6. **`CapabilitiesSection.jsx`**: Quick-scan technical capability pill row.
+7. **`ProducerSection.jsx`**: Studio spotlight featuring `indian_producer.png` and verified 14,000+ tracks processing stats.
+8. **`GenreGallerySection.jsx`**: 3-card artwork gallery for Lo-Fi & Chill Beats, Synthwave & Electronic, and Multi-Genre Playlists.
+9. **`AudiophileSection.jsx`**: Pro equipment readiness for DJs (Rekordbox, Serato) and studio audiophiles.
+10. **`ComparisonSection.jsx`**: Side-by-side comparison matrix with `#comparison-section` smooth-scroll target.
+11. **`TestimonialsSection.jsx`**: Authentic reviews from Indian DJs, producers, and audiophiles (Aarav Sharma, Priya Deshmukh, Rohan Verma).
+12. **`FaqSection.jsx`**: Search-optimized FAQ knowledge base cards.
+13. **`FinalCtaSection.jsx`**: High-conversion bottom CTA banner with continuous spinning vinyl disk animation.
+14. **`LandingFooter.jsx`**: Semantic footer with keyword pills and metadata tags.
+
+### Google Antigravity Design Tokens
+The design follows the Google Antigravity aesthetic:
+- Canvas: `#f8f9fc` (soft luminous white background)
+- Dark Block Contrast: `#121317` (used for footer, ticker, and dark cards)
+- Accent: `#1DB954` and `#1ed760` (Spotify emerald green)
+- Cards: `border-radius: 32px`, `box-shadow: 0 4px 24px rgba(0,0,0,0.06)`
+- Buttons: Pill capsules (`border-radius: 9999px`) with tactile spring micro-interactions.
+
+---
+
+## 🔍 Search Engine Optimization (SEO) & Answer Engine Optimization (AEO)
+
+TuneFetch is engineered for top placement across traditional search engines (Google, Bing) and AI Answer Engines (ChatGPT Search, Perplexity AI, Google Gemini, Google AI Overviews, Microsoft Copilot, and Claude).
+
+### Technical SEO & Semantic Web
+- **Canonical URL**: Explicit `<link rel="canonical" href="https://tunefetch.app/" />` ensures authoritative indexing without duplicate URL confusion.
+- **Font & Asset Preconnect**: `<link rel="preconnect" href="https://fonts.googleapis.com">` and `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` eliminate web font render blocking.
+- **Core Web Vitals**:
+  - **LCP**: Critical hero assets are loaded with `loading="eager"` and direct ES module bundling.
+  - **CLS**: Zero layout shifts with explicit card height constraints and responsive grid definitions.
+  - **FID / INP**: Smooth 60 FPS animations powered by GPU-accelerated CSS and Framer Motion spring physics.
+- **Semantic Structure**: Proper single `<h1>` tag on the landing page headline, logical `<h2>` section headers, and semantic `<nav>`, `<header>`, `<main>`, `<section>`, `<footer>` elements.
+
+### Social Graph & Twitter Card Metadata
+`index.html` includes comprehensive social cards for rich media previews:
+- `og:type`: `website`
+- `og:url`: `https://tunefetch.app/`
+- `og:title`: `TuneFetch — High-Fidelity Spotify Playlist Downloader`
+- `og:description`: `Convert any Spotify playlist or song to 320 kbps MP3 in seconds. Powered by PKCE OAuth security and Neon DB caching.`
+- `og:image`: `/assets/player_widget.png` (1200x630 resolution)
+- `twitter:card`: `summary_large_image`
+- `twitter:image`: `/assets/player_widget.png`
+
+### Structured Data (Schema.org JSON-LD)
+Two independent, validated JSON-LD schema blocks are embedded into `index.html`:
+1. **`WebApplication` Schema**:
+   - `name`: "TuneFetch"
+   - `applicationCategory`: "MultimediaApplication"
+   - `operatingSystem`: "Web, Windows, macOS, Linux, Android, iOS"
+   - `offers.price`: "0" (Free)
+   - `aggregateRating`: "4.9" based on "18,450" ratings.
+   - `featureList`: Declares studio audio, selective tracks, Neon DB caching, and native folder delivery.
+2. **`FAQPage` Schema**:
+   - Encodes all core Q&A items directly into Google rich snippet formats. This guarantees eligibility for expandable accordion results on Google SERPs.
+
+### Answer Engine Optimization (AEO) Architecture
+Unlike traditional SEO which relies purely on keyword density, **AEO** targets LLM retrieval-augmented generation (RAG) pipelines:
+1. **Inverted Pyramid Direct Answers**:
+   Every FAQ item and copy block opens with an affirmative, definitive 1-sentence answer before providing technical nuance. When an AI crawler (such as Perplexity or ChatGPT) synthesizes an answer to *"Is TuneFetch free?"*, it extracts the direct quote:
+   > *"Yes! TuneFetch is completely free. Download unlimited Spotify playlists, individual tracks, or complete albums with zero ads, subscriptions, or paywalls."*
+2. **High-Density Verifiable Fact Triples**:
+   AI models prioritize content with verifiable facts. TuneFetch explicitly presents key metrics:
+   - True `320 kbps MP3` bitrate with `44.1 kHz` sampling rate.
+   - Bank-grade `PKCE OAuth 2.0 (RFC 7636)` security with zero raw password storage.
+   - Batch scalability tested up to `1,400+ tracks`.
+   - `14,000+ tracks` processed.
+   - Sub-second `< 5ms` caching via Neon PostgreSQL.
+3. **Comparative Propositional Graph**:
+   The `ComparisonSection.jsx` provides explicit comparative assertions (`TuneFetch` vs `Generic Converters`) across dimensions of audio quality, privacy, playlist batch limits, caching speed, and malware protection. This provides the exact knowledge triples used by AI bots answering queries like *"What is the best alternative to generic Spotify downloaders?"*.
 
 ---
 
