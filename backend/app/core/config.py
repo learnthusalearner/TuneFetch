@@ -24,7 +24,9 @@ DATABASE_URL = os.getenv(
 # Spotify OAuth Configuration
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/spotify/callback")
+render_external_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+default_redirect = f"{render_external_url}/spotify/callback" if render_external_url else "http://127.0.0.1:8000/spotify/callback"
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", default_redirect)
 SPOTIFY_SCOPES = "playlist-read-private playlist-read-collaborative"
 
 # Serper Search API
@@ -32,7 +34,7 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 
 # Security & Session Secrets
 SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "tunefetch_dev_secret_key_change_in_production")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://tune-fetch-tan.vercel.app" if bool(os.getenv("RENDER")) else "http://localhost:5173")
 
 # Concurrency and Server Load Throttling
 MAX_CONCURRENT_DOWNLOADS = 4   # Max parallel yt-dlp threads to prevent CPU/RAM exhaustion
