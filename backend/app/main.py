@@ -46,13 +46,20 @@ def create_app() -> FastAPI:
     app.include_router(media_router)
     app.include_router(spotify_router)
 
-    @app.get("/", tags=["Root"])
+    @app.api_route("/", methods=["GET", "HEAD"], tags=["Root"])
     def root():
         return {
             "app": APP_TITLE,
             "version": APP_VERSION,
             "status": "online",
             "docs_url": "/docs"
+        }
+
+    @app.api_route("/health", methods=["GET", "HEAD"], tags=["Root"])
+    def health():
+        return {
+            "status": "healthy",
+            "version": APP_VERSION
         }
 
     return app

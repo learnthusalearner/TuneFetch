@@ -5,7 +5,7 @@ from app.core.config import APP_VERSION
 
 router = APIRouter(prefix="/api", tags=["Health"])
 
-@router.get("/health", response_model=HealthResponse)
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 def health_check():
     """
     Checks backend health, version, and FFmpeg engine availability.

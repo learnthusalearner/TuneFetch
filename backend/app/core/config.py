@@ -53,11 +53,12 @@ if cors_env:
     CORS_ORIGINS = [orig.strip() for orig in cors_env.split(",") if orig.strip()]
 else:
     CORS_ORIGINS = [
-        FRONTEND_URL,
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+if FRONTEND_URL and FRONTEND_URL not in CORS_ORIGINS:
+    CORS_ORIGINS.append(FRONTEND_URL)
 CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
 

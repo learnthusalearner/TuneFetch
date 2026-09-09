@@ -835,6 +835,14 @@ pytest tests/test_spotify_pipeline.py
 ### ❌ Session Cookie in Cross-Origin environments
 - **Fix**: Ensure the frontend Vite proxy routes `/spotify` and `/api` to the backend server with `credentials: 'include'`.
 
+### ❌ Render: `No open ports detected on 0.0.0.0` / `HEAD / 405 Method Not Allowed`
+- **Cause**: The application was listening strictly on `127.0.0.1` or did not bind to the dynamic `$PORT` assigned by Render, or rejected HEAD health-check probes.
+- **Fix**:
+  - **Root Directory**: `backend` (or leave blank if using root)
+  - **Build Command**: `pip install -r requirements.txt` (or `pip install -r backend/requirements.txt`)
+  - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` or `python run.py`
+  - **Health Check Path**: `/` or `/health` (both accept `GET` and `HEAD` requests returning `200 OK`)
+
 ---
 
 ## 📄 License
