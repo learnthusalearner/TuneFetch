@@ -68,4 +68,9 @@ if "https://tune-fetch-tan.vercel.app" not in CORS_ORIGINS:
     CORS_ORIGINS.append("https://tune-fetch-tan.vercel.app")
 CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
 
+# YouTube Anti-Bot & Proof of Origin (POT) Provider Configuration
+YOUTUBE_POT_PROVIDER_URL = os.getenv("YOUTUBE_POT_PROVIDER_URL", "")
+YOUTUBE_PO_TOKEN = os.getenv("YOUTUBE_PO_TOKEN", "")
+ROTATING_PROXY_URL = os.getenv("ROTATING_PROXY_URL", os.getenv("YOUTUBE_PROXY", ""))
+
 

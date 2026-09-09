@@ -14,7 +14,10 @@ from app.core.config import (
     DEFAULT_BITRATE,
     MAX_CONCURRENT_DOWNLOADS,
     MAX_TASK_HISTORY,
-    CLEANUP_INTERVAL_SECONDS
+    CLEANUP_INTERVAL_SECONDS,
+    YOUTUBE_POT_PROVIDER_URL,
+    YOUTUBE_PO_TOKEN,
+    ROTATING_PROXY_URL
 )
 from app.utils.ffmpeg_helper import get_ffmpeg_path
 from app.services.spotify_resolver import (
@@ -144,7 +147,7 @@ def get_cookie_file() -> Optional[str]:
 def build_base_ydl_opts() -> Dict[str, Any]:
     """
     Constructs default yt-dlp options with multi-client fallbacks,
-    stealth browser headers, and cookie support to avoid bot blocks on cloud datacenters.
+    stealth browser headers, PO token provider integration, and cookie support.
     """
     opts: Dict[str, Any] = {
         "quiet": False,
@@ -157,27 +160,46 @@ def build_base_ydl_opts() -> Dict[str, Any]:
             "Accept-Language": "en-US,en;q=0.9",
             "Sec-Fetch-Mode": "navigate",
         },
+        "extractor_args": {},
     }
 
+    # 1. Optional Proxy Support (Residential or DataCenter Proxy)
+    if ROTATING_PROXY_URL:
+        opts["proxy"] = ROTATING_PROXY_URL
+        logger.info("Using configured proxy for media extraction")
+
+    # 2. Automated Proof-of-Origin (POT) Provider Service (Option 2: bgutil-ytdlp-pot-provider)
+    if YOUTUBE_POT_PROVIDER_URL:
+        opts["extractor_args"]["youtubepot-bgutilhttp"] = {
+            "base_url": YOUTUBE_POT_PROVIDER_URL.rstrip("/")
+        }
+        opts["extractor_args"].setdefault("youtube", {})["player_client"] = [
+            "web", "web_embedded", "android"
+        ]
+        logger.info(f"Connected to automated PO Token generator service: {YOUTUBE_POT_PROVIDER_URL}")
+
+    # 3. Static Proof-of-Origin (PO) Token
+    if YOUTUBE_PO_TOKEN:
+        token_val = YOUTUBE_PO_TOKEN.strip()
+        if "+" not in token_val:
+            token_val = f"web+{token_val}"
+        opts["extractor_args"].setdefault("youtube", {})["po_token"] = [token_val]
+        logger.info("Configured custom YouTube PO Token")
+
+    # 4. Cookie or Datacenter Client routing
     cookie_file = get_cookie_file()
     if cookie_file:
         opts["cookiefile"] = cookie_file
         # Authenticated clients that support cookies
-        opts["extractor_args"] = {
-            "youtube": {
-                "player_client": ["web_embedded", "tv_downgraded", "web"],
-            }
-        }
+        opts["extractor_args"].setdefault("youtube", {})["player_client"] = [
+            "web_embedded", "tv_downgraded", "web"
+        ]
         logger.info(f"Loaded YouTube authentication cookies from: {cookie_file}")
-    else:
-        # Datacenter/server fallback without cookies: android client bypasses bot blocks
+    elif not YOUTUBE_POT_PROVIDER_URL:
+        # Datacenter/server fallback without cookies or POT service: android client bypasses bot blocks
         custom_client = os.getenv("YOUTUBE_PLAYER_CLIENT", "android,web")
         clients = [c.strip() for c in custom_client.split(",") if c.strip()]
-        opts["extractor_args"] = {
-            "youtube": {
-                "player_client": clients,
-            }
-        }
+        opts["extractor_args"].setdefault("youtube", {})["player_client"] = clients
 
     return opts
 
