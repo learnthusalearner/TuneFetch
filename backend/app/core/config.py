@@ -34,7 +34,7 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 
 # Security & Session Secrets
 SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "tunefetch_dev_secret_key_change_in_production")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://tune-fetch-tan.vercel.app" if bool(os.getenv("RENDER")) else "http://localhost:5173")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://tune-fetch-tan.vercel.app")
 
 # Concurrency and Server Load Throttling
 MAX_CONCURRENT_DOWNLOADS = 4   # Max parallel yt-dlp threads to prevent CPU/RAM exhaustion

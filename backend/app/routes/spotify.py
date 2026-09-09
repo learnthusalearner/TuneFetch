@@ -11,7 +11,7 @@ from app.core.config import FRONTEND_URL, SERPER_API_KEY
 from app.core.database import get_db
 from app.models.db_models import User, SpotifyAccount, PlaylistDownloadJob
 from app.utils.auth_helper import get_current_user, set_session_cookie
-from app.services.spotify_service import SpotifyService
+from app.services.spotify_service import SpotifyService, _decode_oauth_state
 from app.services.playlist_pipeline import PlaylistPipeline
 from app.services.serper_service import SerperService
 from app.services.downloader import DownloadManager
@@ -30,6 +30,38 @@ class SingleTrackDownloadRequest(BaseModel):
     thumbnail: Optional[str] = None
     format: Optional[str] = "mp3-320"
 
+def get_frontend_url(request: Request, state: Optional[str] = None) -> str:
+    """
+    Determines the correct frontend origin to redirect the user back to.
+    Never defaults to localhost if accessed from a deployed domain.
+    """
+    if state:
+        try:
+            decoded = _decode_oauth_state(state)
+            if len(decoded) > 3 and decoded[3]:
+                return decoded[3].rstrip("/")
+        except Exception:
+            pass
+
+    referer = request.headers.get("referer") or request.headers.get("origin")
+    if referer:
+        try:
+            parsed = urllib.parse.urlparse(referer)
+            if parsed.netloc and ("localhost" not in parsed.netloc and "127.0.0.1" not in parsed.netloc):
+                return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            pass
+
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+    if "onrender.com" in host or bool(os.getenv("RENDER")) or os.getenv("ENVIRONMENT") == "production":
+        return "https://tune-fetch-tan.vercel.app"
+
+    env_url = os.getenv("FRONTEND_URL", "")
+    if env_url and "localhost" not in env_url and "127.0.0.1" not in env_url:
+        return env_url.rstrip("/")
+
+    return FRONTEND_URL or "https://tune-fetch-tan.vercel.app"
+
 @router.get("/auth")
 def spotify_auth_start(
     request: Request,
@@ -40,7 +72,8 @@ def spotify_auth_start(
     """
     Initiates the Spotify PKCE OAuth flow with state protection.
     """
-    auth_url = SpotifyService.create_auth_url(user_id=current_user.id, request=request)
+    frontend_url = get_frontend_url(request)
+    auth_url = SpotifyService.create_auth_url(user_id=current_user.id, request=request, frontend_url=frontend_url)
     if redirect:
         resp = RedirectResponse(url=auth_url)
         set_session_cookie(resp, current_user.id)
@@ -59,10 +92,11 @@ async def spotify_auth_callback(
     """
     Handles the Spotify authorization code redirect. Exchanges code for tokens and persists connection.
     """
+    target_frontend = get_frontend_url(request, state)
     if error:
         logger.warning(f"Spotify OAuth error received: {error}")
         safe_error = urllib.parse.quote_plus(str(error))
-        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={safe_error}")
+        return RedirectResponse(url=f"{target_frontend}/?spotify_error={safe_error}")
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state parameter.")
@@ -75,13 +109,13 @@ async def spotify_auth_callback(
             db=db,
             request=request
         )
-        resp = RedirectResponse(url=f"{FRONTEND_URL}/?spotify=connected")
+        resp = RedirectResponse(url=f"{target_frontend}/?spotify=connected")
         set_session_cookie(resp, resolved_user_id)
         return resp
     except Exception as e:
         logger.error(f"Callback token exchange error: {e}")
         safe_error = urllib.parse.quote_plus(str(e))
-        return RedirectResponse(url=f"{FRONTEND_URL}/?spotify_error={safe_error}")
+        return RedirectResponse(url=f"{target_frontend}/?spotify_error={safe_error}")
 
 @router.get("/status")
 def get_spotify_status(

@@ -70,31 +70,36 @@ def resolve_redirect_uri(request: Optional[Any] = None) -> str:
 
     return SPOTIFY_REDIRECT_URI or "http://127.0.0.1:8000/spotify/callback"
 
-def _encode_oauth_state(user_id: str, code_verifier: str, redirect_uri: str = "") -> str:
-    """Encodes and encrypts user_id, code_verifier, and redirect_uri into a tamper-proof state string."""
-    payload = {
-        "u": user_id,
-        "v": code_verifier,
-        "r": redirect_uri,
-        "t": int(time.time())
+def _encode_oauth_state(user_id: str, code_verifier: str, redirect_uri: str = "", frontend_url: str = "") -> str:
+    """Generates a clean URL-safe OAuth state token and stores parameters in memory store."""
+    state = secrets.token_urlsafe(32)
+    _pkce_store[state] = {
+        "user_id": user_id,
+        "code_verifier": code_verifier,
+        "redirect_uri": redirect_uri,
+        "frontend_url": frontend_url,
+        "timestamp": time.time()
     }
-    return encrypt_token(json.dumps(payload))
+    return state
 
-def _decode_oauth_state(state: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Decodes and validates encrypted OAuth state string. Returns (user_id, code_verifier, redirect_uri)."""
+def _decode_oauth_state(state: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Decodes OAuth state string. Returns (user_id, code_verifier, redirect_uri, frontend_url)."""
+    stored = _pkce_store.get(state)
+    if stored and time.time() - stored.get("timestamp", 0) <= 900:
+        return stored.get("user_id"), stored.get("code_verifier"), stored.get("redirect_uri"), stored.get("frontend_url")
+
     try:
         raw = decrypt_token(state)
         data = json.loads(raw)
-        # Check TTL (15 minutes)
-        if time.time() - data.get("t", 0) > 900:
-            return None, None, None
-        return data.get("u"), data.get("v"), data.get("r")
+        if time.time() - data.get("t", 0) <= 900:
+            return data.get("u"), data.get("v"), data.get("r"), data.get("f")
     except Exception:
-        return None, None, None
+        pass
+    return None, None, None, None
 
 class SpotifyService:
     @staticmethod
-    def create_auth_url(user_id: str, request: Optional[Any] = None) -> str:
+    def create_auth_url(user_id: str, request: Optional[Any] = None, frontend_url: str = "") -> str:
         """
         Constructs the Spotify authorization URL with PKCE and encrypted state protection.
         """
@@ -107,15 +112,7 @@ class SpotifyService:
         clean_pkce_store()
         code_verifier, code_challenge = _generate_pkce_pair()
         redirect_uri = resolve_redirect_uri(request)
-        state = _encode_oauth_state(user_id, code_verifier, redirect_uri)
-
-        # Also store in memory as fallback
-        _pkce_store[state] = {
-            "user_id": user_id,
-            "code_verifier": code_verifier,
-            "redirect_uri": redirect_uri,
-            "timestamp": time.time()
-        }
+        state = _encode_oauth_state(user_id, code_verifier, redirect_uri, frontend_url)
 
         params = {
             "client_id": SPOTIFY_CLIENT_ID,
