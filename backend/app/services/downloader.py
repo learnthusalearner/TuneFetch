@@ -157,18 +157,27 @@ def build_base_ydl_opts() -> Dict[str, Any]:
             "Accept-Language": "en-US,en;q=0.9",
             "Sec-Fetch-Mode": "navigate",
         },
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web"],
-                "player_skip": ["webpage", "configs"],
-            }
-        },
     }
 
     cookie_file = get_cookie_file()
     if cookie_file:
         opts["cookiefile"] = cookie_file
+        # Authenticated clients that support cookies
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["web_embedded", "tv_downgraded", "web"],
+            }
+        }
         logger.info(f"Loaded YouTube authentication cookies from: {cookie_file}")
+    else:
+        # Datacenter/server fallback without cookies: android client bypasses bot blocks
+        custom_client = os.getenv("YOUTUBE_PLAYER_CLIENT", "android,web")
+        clients = [c.strip() for c in custom_client.split(",") if c.strip()]
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": clients,
+            }
+        }
 
     return opts
 
@@ -225,14 +234,43 @@ class DownloadManager:
             try:
                 info = ydl.extract_info(url, download=False)
             except Exception as e:
-                if not url.startswith("http://") and not url.startswith("https://"):
-                    info = ydl.extract_info(f"ytsearch1:{url}", download=False)
-                    if "entries" in info and len(info["entries"]) > 0:
-                        info = info["entries"][0]
-                    else:
-                        raise ValueError(f"No results found for search query: {url}")
+                err_str = str(e)
+                # If bot verification hit or client rejected, retry with explicit android client
+                if "Sign in to confirm you're not a bot" in err_str or "confirm you" in err_str.lower():
+                    logger.warning(f"get_info hit bot verification for {url}. Retrying with android client...")
+                    retry_opts = dict(ydl_opts)
+                    retry_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+                    try:
+                        with yt_dlp.YoutubeDL(retry_opts) as retry_ydl:
+                            info = retry_ydl.extract_info(url, download=False)
+                    except Exception as fb_err:
+                        raise ValueError(
+                            "YouTube requested bot verification on this datacenter IP. "
+                            "Please configure YOUTUBE_COOKIES in Render Environment Variables."
+                        ) from fb_err
+                elif not url.startswith("http://") and not url.startswith("https://"):
+                    try:
+                        info = ydl.extract_info(f"ytsearch1:{url}", download=False)
+                        if "entries" in info and len(info["entries"]) > 0:
+                            info = info["entries"][0]
+                        else:
+                            raise ValueError(f"No results found for search query: {url}")
+                    except Exception as search_err:
+                        err_search = str(search_err)
+                        if "Sign in to confirm you're not a bot" in err_search or "confirm you" in err_search.lower():
+                            logger.warning(f"ytsearch hit bot verification for '{url}'. Retrying with android client...")
+                            retry_opts = dict(ydl_opts)
+                            retry_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+                            with yt_dlp.YoutubeDL(retry_opts) as retry_ydl:
+                                sinfo = retry_ydl.extract_info(f"ytsearch1:{url}", download=False)
+                                if "entries" in sinfo and len(sinfo["entries"]) > 0:
+                                    info = sinfo["entries"][0]
+                                else:
+                                    raise ValueError(f"No results found for search query: {url}")
+                        else:
+                            raise search_err
                 else:
-                    raise ValueError(f"Failed to fetch info: {str(e)}")
+                    raise ValueError(f"Failed to fetch info: {err_str}")
 
         if not info:
             raise ValueError("No metadata could be extracted from the provided URL")
@@ -404,7 +442,19 @@ class DownloadManager:
                     tasks[task_id]["status"] = "downloading"
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(target_url, download=True)
+                try:
+                    info = ydl.extract_info(target_url, download=True)
+                except Exception as dl_err:
+                    err_str = str(dl_err)
+                    if "Sign in to confirm you're not a bot" in err_str or "confirm you" in err_str.lower():
+                        logger.warning(f"Download hit bot verification for {target_url}. Retrying with android fallback...")
+                        fallback_opts = dict(ydl_opts)
+                        fallback_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+                        with yt_dlp.YoutubeDL(fallback_opts) as fallback_ydl:
+                            info = fallback_ydl.extract_info(target_url, download=True)
+                    else:
+                        raise dl_err
+
                 if "entries" in info and len(info["entries"]) > 0:
                     info = info["entries"][0]
 
