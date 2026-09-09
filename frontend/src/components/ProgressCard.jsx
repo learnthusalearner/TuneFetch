@@ -6,12 +6,11 @@ import { formatFileSize, sanitizeClientFilename } from '../utils/formatters';
 
 export default function ProgressCard({ task, onPlayAudio }) {
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
-  if (!task) return null;
 
-  const isCompleted = task.status === 'completed';
-  const isError = task.status === 'error';
-  const isConverting = task.status === 'converting';
-  const isDownloading = task.status === 'downloading' || task.status === 'pending';
+  const isCompleted = task?.status === 'completed';
+  const isError = task?.status === 'error';
+  const isConverting = task?.status === 'converting';
+  const isDownloading = task?.status === 'downloading' || task?.status === 'pending';
 
   useEffect(() => {
     if (isCompleted) {
@@ -21,11 +20,13 @@ export default function ProgressCard({ task, onPlayAudio }) {
           spread: 70,
           origin: { y: 0.6 }
         });
-      } catch (e) {
+      } catch {
         // Confetti non-fatal
       }
     }
   }, [isCompleted]);
+
+  if (!task) return null;
 
   const handleDirectDownload = async () => {
     if (!task.file_id) return;

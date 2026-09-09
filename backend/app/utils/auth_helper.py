@@ -53,14 +53,14 @@ def unsign_session_id(signed_value: str) -> Optional[str]:
 def set_session_cookie(response: Response, user_id: str):
     """Sets a cryptographically signed, HTTP-only session cookie."""
     from app.core.config import FRONTEND_URL
-    is_secure = FRONTEND_URL.startswith("https") or os.getenv("ENVIRONMENT", "").lower() == "production"
+    is_secure = FRONTEND_URL.startswith("https") or os.getenv("ENVIRONMENT", "").lower() == "production" or bool(os.getenv("RENDER"))
     signed_cookie = sign_session_id(user_id)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=signed_cookie,
         httponly=True,
         secure=is_secure,
-        samesite="lax",
+        samesite="none" if is_secure else "lax",
         max_age=60 * 60 * 24 * 365,  # 1 year persistence
         path="/"
     )

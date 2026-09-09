@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Music, AlertCircle, CheckCircle2, RefreshCw, LogOut } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
 
 import Navbar from '../components/layout/Navbar';
 import { ToastContainer } from '../components/ui/Toast';
@@ -10,9 +10,11 @@ import SpotifyConnect from '../components/Spotify/SpotifyConnect';
 import SpotifyPlaylists from '../components/Spotify/SpotifyPlaylists';
 import PlaylistTracksModal from '../components/Spotify/PlaylistTracksModal';
 import BatchProgressCard from '../components/Spotify/BatchProgressCard';
+import ProgressCard from '../components/ProgressCard';
 
 import { api } from '../services/api';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useDownloadTask } from '../hooks/useDownloadTask';
 import { STORAGE_KEYS } from '../constants';
 
 /* ─── Page-switch animation ──────────────────────────────────── */
@@ -100,10 +102,9 @@ export default function DashboardPage({ onGoHome }) {
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.get('spotify') === 'connected') {
-        setActiveTab('spotify');
+        pushToast('Spotify account connected successfully!', 'success');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (params.get('spotify_error')) {
-        setActiveTab('spotify');
         let rawErr = params.get('spotify_error') || '';
         try { rawErr = decodeURIComponent(rawErr.replace(/\+/g, ' ')); } catch {}
         setGeneralError(`Spotify authorization: ${rawErr}`);

@@ -17,14 +17,23 @@ def test_no_hardcoded_database_passwords_in_config():
     assert "neondb_owner" not in content, "Hardcoded database user found in config.py!"
 
 def test_session_cookie_attributes():
-    """Verify that set_session_cookie applies HttpOnly and SameSite=lax."""
+    """Verify that set_session_cookie applies HttpOnly and SameSite (lax locally, none in production)."""
     response = Response()
     set_session_cookie(response, "test-user-id-456")
     cookie_header = response.headers.get("set-cookie")
     assert cookie_header is not None
     assert f"{SESSION_COOKIE_NAME}=" in cookie_header
     assert "HttpOnly" in cookie_header or "httponly" in cookie_header
-    assert "SameSite=lax" in cookie_header or "samesite=lax" in cookie_header
+    assert "SameSite=lax" in cookie_header or "samesite=lax" in cookie_header or "SameSite=none" in cookie_header or "samesite=none" in cookie_header
+
+    # Test production/secure cross-site mode
+    prod_response = Response()
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("ENVIRONMENT", "production")
+        set_session_cookie(prod_response, "prod-user-123")
+    prod_header = prod_response.headers.get("set-cookie").lower()
+    assert "samesite=none" in prod_header
+    assert "secure" in prod_header
 
 def test_cryptographic_signing_tamper_detection():
     """Verify that unsigned or tampered session IDs are rejected."""

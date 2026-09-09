@@ -60,6 +60,12 @@ function StatPill({ icon, label, value, color }) {
 
 /* ─── Main component ─────────────────────────────────────────── */
 export default function BatchProgressCard({ job, onDismiss, onPlayAudio }) {
+  const [isDownloadingFolder, setIsDownloadingFolder] = React.useState(false);
+  const [isSavingToPC, setIsSavingToPC]               = React.useState(false);
+  const [pcSaveProgress, setPcSaveProgress]           = React.useState(null);
+  const [pcSaveSuccess, setPcSaveSuccess]             = React.useState(false);
+  const hasDirectoryPicker = isDirectoryPickerSupported();
+
   if (!job) return null;
 
   const {
@@ -86,12 +92,6 @@ export default function BatchProgressCard({ job, onDismiss, onPlayAudio }) {
   const isFailed     = normalizedStatus === 'failed';
   const trackList    = tracks.length > 0 ? tracks : track_results;
   const etaFormatted = formatEta(eta_seconds);
-
-  const [isDownloadingFolder, setIsDownloadingFolder] = React.useState(false);
-  const [isSavingToPC, setIsSavingToPC]               = React.useState(false);
-  const [pcSaveProgress, setPcSaveProgress]           = React.useState(null);
-  const [pcSaveSuccess, setPcSaveSuccess]             = React.useState(false);
-  const hasDirectoryPicker = isDirectoryPickerSupported();
 
   const handleSaveDirectlyToFolder = async () => {
     setIsSavingToPC(true);

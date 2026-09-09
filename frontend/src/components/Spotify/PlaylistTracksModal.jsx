@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, Music, Download, Clock, Disc3, Check, Loader2, CheckSquare, Square, FolderDown } from 'lucide-react';
+import { X, Search, Music, Download, Clock, Disc3, Loader2, CheckSquare, Square, FolderDown } from 'lucide-react';
 import { AUDIO_FORMATS } from '../../constants';
 
 export default function PlaylistTracksModal({

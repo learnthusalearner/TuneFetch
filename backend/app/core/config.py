@@ -57,8 +57,13 @@ else:
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://tune-fetch-tan.vercel.app",
+        "https://tunefetch-t5mp.onrender.com",
     ]
 if FRONTEND_URL and FRONTEND_URL not in CORS_ORIGINS:
     CORS_ORIGINS.append(FRONTEND_URL)
+if "https://tune-fetch-tan.vercel.app" not in CORS_ORIGINS:
+    CORS_ORIGINS.append("https://tune-fetch-tan.vercel.app")
 CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
+
 
