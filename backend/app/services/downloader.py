@@ -88,6 +88,90 @@ def _background_gc_loop():
 gc_thread = threading.Thread(target=_background_gc_loop, daemon=True, name="TuneFetch-GC")
 gc_thread.start()
 
+def get_cookie_file() -> Optional[str]:
+    """
+    Locates or initializes a Netscape cookies.txt file for yt-dlp authentication.
+    Allows bypassing YouTube bot detection on cloud/datacenter IPs.
+    Supports:
+    1. YOUTUBE_COOKIE_FILE / COOKIE_FILE env var (path to file)
+    2. YOUTUBE_COOKIES / COOKIES_TXT env var (raw text content)
+    3. YOUTUBE_COOKIES_BASE64 env var (base64-encoded text content)
+    4. Existing cookies.txt file in workspace root or backend
+    """
+    for env_var in ("YOUTUBE_COOKIE_FILE", "COOKIE_FILE"):
+        fpath = os.getenv(env_var)
+        if fpath and os.path.isfile(fpath):
+            return fpath
+
+    # Raw cookie text in environment variable
+    raw_cookies = os.getenv("YOUTUBE_COOKIES") or os.getenv("COOKIES_TXT")
+    if raw_cookies and len(raw_cookies.strip()) > 10:
+        target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+        try:
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(raw_cookies.strip())
+            return target_path
+        except Exception as e:
+            logger.warning(f"Failed writing YOUTUBE_COOKIES to file: {e}")
+
+    # Base64 encoded cookie text
+    b64_cookies = os.getenv("YOUTUBE_COOKIES_BASE64")
+    if b64_cookies and len(b64_cookies.strip()) > 10:
+        target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+        try:
+            import base64
+            decoded = base64.b64decode(b64_cookies.strip()).decode("utf-8")
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(decoded)
+            return target_path
+        except Exception as e:
+            logger.warning(f"Failed writing YOUTUBE_COOKIES_BASE64 to file: {e}")
+
+    # Local workspace candidates
+    from app.core.config import BASE_DIR
+    candidates = [
+        os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt"),
+        os.path.join(BASE_DIR, "cookies.txt"),
+        os.path.join(BASE_DIR, "backend", "cookies.txt"),
+        os.path.join(DOWNLOADS_DIR, "cookies.txt"),
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.path.getsize(candidate) > 10:
+            return candidate
+
+    return None
+
+def build_base_ydl_opts() -> Dict[str, Any]:
+    """
+    Constructs default yt-dlp options with multi-client fallbacks,
+    stealth browser headers, and cookie support to avoid bot blocks on cloud datacenters.
+    """
+    opts: Dict[str, Any] = {
+        "quiet": False,
+        "no_warnings": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Fetch-Mode": "navigate",
+        },
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
+                "player_skip": ["webpage", "configs"],
+            }
+        },
+    }
+
+    cookie_file = get_cookie_file()
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
+        logger.info(f"Loaded YouTube authentication cookies from: {cookie_file}")
+
+    return opts
+
 class DownloadManager:
     @staticmethod
     def get_info(url: str) -> Dict[str, Any]:
@@ -127,12 +211,12 @@ class DownloadManager:
                 }
 
         # 2. General URL parsing via yt-dlp
-        ydl_opts = {
+        ydl_opts = build_base_ydl_opts()
+        ydl_opts.update({
             "quiet": True,
-            "no_warnings": True,
             "extract_flat": "in_playlist",
             "skip_download": True,
-        }
+        })
         ffmpeg_exe = get_ffmpeg_path()
         if ffmpeg_exe:
             ydl_opts["ffmpeg_location"] = ffmpeg_exe
@@ -294,14 +378,12 @@ class DownloadManager:
 
         out_template = os.path.join(DOWNLOADS_DIR, f"{task_id}_%(title).150B.%(ext)s")
 
-        ydl_opts: Dict[str, Any] = {
+        ydl_opts = build_base_ydl_opts()
+        ydl_opts.update({
             "format": "bestaudio/best",
             "outtmpl": out_template,
             "progress_hooks": [progress_hook],
-            "quiet": False,
-            "no_warnings": True,
-            "noplaylist": True,
-        }
+        })
 
         if ffmpeg_exe:
             ydl_opts["ffmpeg_location"] = ffmpeg_exe
@@ -359,10 +441,16 @@ class DownloadManager:
 
         except Exception as e:
             logger.error(f"Download task {task_id} encountered an error: {e}", exc_info=True)
+            err_msg = str(e)
+            if "Sign in to confirm you're not a bot" in err_msg or "confirm you" in err_msg.lower():
+                err_msg = (
+                    "YouTube requested bot verification on this datacenter IP. "
+                    "Please export cookies.txt from your browser and configure YOUTUBE_COOKIES in Render Environment Variables."
+                )
             with tasks_lock:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "error"
-                    tasks[task_id]["error"] = str(e)
+                    tasks[task_id]["error"] = err_msg
 
     @staticmethod
     def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
