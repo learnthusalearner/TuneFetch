@@ -42,30 +42,59 @@ def clean_pkce_store():
     for k in expired:
         _pkce_store.pop(k, None)
 
-def _encode_oauth_state(user_id: str, code_verifier: str) -> str:
-    """Encodes and encrypts user_id and code_verifier into a tamper-proof state string."""
+def resolve_redirect_uri(request: Optional[Any] = None) -> str:
+    """
+    Dynamically determines the correct Spotify Redirect URI.
+    1. If request is provided, reconstruct from incoming headers (reverse proxy aware).
+    2. If explicit production SPOTIFY_REDIRECT_URI is set, use it.
+    3. If running on Render or production, default to https://tunefetch-t5mp.onrender.com/spotify/callback.
+    4. Fallback to SPOTIFY_REDIRECT_URI or http://127.0.0.1:8000/spotify/callback.
+    """
+    if request is not None:
+        try:
+            proto = request.headers.get("x-forwarded-proto", getattr(request.url, "scheme", "https"))
+            host = request.headers.get("x-forwarded-host", request.headers.get("host", getattr(request.url, "netloc", "")))
+            if host:
+                host_clean = host.split(":")[0] if "onrender.com" in host else host
+                return f"{proto}://{host_clean}/spotify/callback"
+        except Exception:
+            pass
+
+    env_uri = os.getenv("SPOTIFY_REDIRECT_URI", "")
+    if env_uri and "127.0.0.1" not in env_uri and "localhost" not in env_uri:
+        return env_uri
+
+    if bool(os.getenv("RENDER")) or os.getenv("ENVIRONMENT") == "production":
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com").rstrip("/")
+        return f"{render_url}/spotify/callback"
+
+    return SPOTIFY_REDIRECT_URI or "http://127.0.0.1:8000/spotify/callback"
+
+def _encode_oauth_state(user_id: str, code_verifier: str, redirect_uri: str = "") -> str:
+    """Encodes and encrypts user_id, code_verifier, and redirect_uri into a tamper-proof state string."""
     payload = {
         "u": user_id,
         "v": code_verifier,
+        "r": redirect_uri,
         "t": int(time.time())
     }
     return encrypt_token(json.dumps(payload))
 
-def _decode_oauth_state(state: str) -> Tuple[Optional[str], Optional[str]]:
-    """Decodes and validates encrypted OAuth state string."""
+def _decode_oauth_state(state: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Decodes and validates encrypted OAuth state string. Returns (user_id, code_verifier, redirect_uri)."""
     try:
         raw = decrypt_token(state)
         data = json.loads(raw)
         # Check TTL (15 minutes)
         if time.time() - data.get("t", 0) > 900:
-            return None, None
-        return data.get("u"), data.get("v")
+            return None, None, None
+        return data.get("u"), data.get("v"), data.get("r")
     except Exception:
-        return None, None
+        return None, None, None
 
 class SpotifyService:
     @staticmethod
-    def create_auth_url(user_id: str) -> str:
+    def create_auth_url(user_id: str, request: Optional[Any] = None) -> str:
         """
         Constructs the Spotify authorization URL with PKCE and encrypted state protection.
         """
@@ -77,19 +106,21 @@ class SpotifyService:
 
         clean_pkce_store()
         code_verifier, code_challenge = _generate_pkce_pair()
-        state = _encode_oauth_state(user_id, code_verifier)
+        redirect_uri = resolve_redirect_uri(request)
+        state = _encode_oauth_state(user_id, code_verifier, redirect_uri)
 
         # Also store in memory as fallback
         _pkce_store[state] = {
             "user_id": user_id,
             "code_verifier": code_verifier,
+            "redirect_uri": redirect_uri,
             "timestamp": time.time()
         }
 
         params = {
             "client_id": SPOTIFY_CLIENT_ID,
             "response_type": "code",
-            "redirect_uri": SPOTIFY_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "state": state,
             "scope": SPOTIFY_SCOPES,
             "code_challenge_method": "S256",
@@ -105,7 +136,8 @@ class SpotifyService:
         user_id: str,
         code: str,
         state: str,
-        db: Session
+        db: Session,
+        request: Optional[Any] = None
     ) -> Tuple[SpotifyAccount, str]:
         """
         Validates state and exchanges the authorization code for access & refresh tokens.
@@ -114,19 +146,26 @@ class SpotifyService:
         clean_pkce_store()
         target_user_id = user_id
         code_verifier = None
+        redirect_uri = ""
 
         # 1. First attempt to decrypt state token
-        decoded_user_id, decoded_verifier = _decode_oauth_state(state)
+        decoded = _decode_oauth_state(state)
+        decoded_user_id = decoded[0] if len(decoded) > 0 else None
+        decoded_verifier = decoded[1] if len(decoded) > 1 else None
+        state_redirect_uri = decoded[2] if len(decoded) > 2 else ""
         if decoded_verifier:
             code_verifier = decoded_verifier
             if decoded_user_id:
                 target_user_id = decoded_user_id
+            if state_redirect_uri:
+                redirect_uri = state_redirect_uri
         else:
             # 2. Fallback to memory store if state was plain
             stored_data = _pkce_store.pop(state, None)
             if stored_data:
                 code_verifier = stored_data.get("code_verifier")
                 target_user_id = stored_data.get("user_id", user_id)
+                redirect_uri = stored_data.get("redirect_uri", "")
 
         if not code_verifier:
             raise HTTPException(
@@ -134,10 +173,13 @@ class SpotifyService:
                 detail="Invalid or expired OAuth state parameter. Please restart authorization."
             )
 
+        if not redirect_uri:
+            redirect_uri = resolve_redirect_uri(request)
+
         data = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": SPOTIFY_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "client_id": SPOTIFY_CLIENT_ID,
             "code_verifier": code_verifier
         }

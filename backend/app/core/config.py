@@ -24,7 +24,7 @@ DATABASE_URL = os.getenv(
 # Spotify OAuth Configuration
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
-render_external_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+render_external_url = os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com" if bool(os.getenv("RENDER")) else "").rstrip("/")
 default_redirect = f"{render_external_url}/spotify/callback" if render_external_url else "http://127.0.0.1:8000/spotify/callback"
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", default_redirect)
 SPOTIFY_SCOPES = "playlist-read-private playlist-read-collaborative"

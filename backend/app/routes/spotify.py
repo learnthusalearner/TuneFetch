@@ -40,7 +40,7 @@ def spotify_auth_start(
     """
     Initiates the Spotify PKCE OAuth flow with state protection.
     """
-    auth_url = SpotifyService.create_auth_url(user_id=current_user.id)
+    auth_url = SpotifyService.create_auth_url(user_id=current_user.id, request=request)
     if redirect:
         resp = RedirectResponse(url=auth_url)
         set_session_cookie(resp, current_user.id)
@@ -49,6 +49,7 @@ def spotify_auth_start(
 
 @router.get("/callback")
 async def spotify_auth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -71,7 +72,8 @@ async def spotify_auth_callback(
             user_id=current_user.id,
             code=code,
             state=state,
-            db=db
+            db=db,
+            request=request
         )
         resp = RedirectResponse(url=f"{FRONTEND_URL}/?spotify=connected")
         set_session_cookie(resp, resolved_user_id)
