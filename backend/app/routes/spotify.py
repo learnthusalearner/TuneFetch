@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.core.config import FRONTEND_URL, SERPER_API_KEY
 from app.core.database import get_db
 from app.models.db_models import User, SpotifyAccount, PlaylistDownloadJob
-from app.utils.auth_helper import get_current_user, sign_session_id, SESSION_COOKIE_NAME
+from app.utils.auth_helper import get_current_user, set_session_cookie
 from app.services.spotify_service import SpotifyService
 from app.services.playlist_pipeline import PlaylistPipeline
 from app.services.serper_service import SerperService
@@ -43,15 +43,7 @@ def spotify_auth_start(
     auth_url = SpotifyService.create_auth_url(user_id=current_user.id)
     if redirect:
         resp = RedirectResponse(url=auth_url)
-        signed_cookie = sign_session_id(current_user.id)
-        resp.set_cookie(
-            key=SESSION_COOKIE_NAME,
-            value=signed_cookie,
-            httponly=True,
-            samesite="lax",
-            max_age=60 * 60 * 24 * 365,
-            path="/"
-        )
+        set_session_cookie(resp, current_user.id)
         return resp
     return {"success": True, "auth_url": auth_url}
 
@@ -82,15 +74,7 @@ async def spotify_auth_callback(
             db=db
         )
         resp = RedirectResponse(url=f"{FRONTEND_URL}/?spotify=connected")
-        signed_cookie = sign_session_id(resolved_user_id)
-        resp.set_cookie(
-            key=SESSION_COOKIE_NAME,
-            value=signed_cookie,
-            httponly=True,
-            samesite="lax",
-            max_age=60 * 60 * 24 * 365,
-            path="/"
-        )
+        set_session_cookie(resp, resolved_user_id)
         return resp
     except Exception as e:
         logger.error(f"Callback token exchange error: {e}")

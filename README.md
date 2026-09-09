@@ -738,18 +738,26 @@ cd frontend
 npm install
 ```
 
-#### Step 3: Start the Vite development server
+#### Step 3: (Optional) Configure Backend URL in `.env`
+Create `frontend/.env` (or copy from `frontend/.env.example`) to specify your backend URL:
+```env
+VITE_BACKEND_URL=http://127.0.0.1:8000
+```
+*(If omitted, Vite development server defaults to proxying to `http://127.0.0.1:8000`).*
+
+#### Step 4: Start the Vite development server
 ```bash
 npm run dev
 ```
 
-#### Step 4: Open your browser
+#### Step 5: Open your browser
 Navigate to:
 ```
 http://localhost:5173
 ```
 
-*(Requests to `/api` and `/spotify` are automatically proxied to `http://127.0.0.1:8000` via `vite.config.js`)*
+*(Requests to `/api` and `/spotify` are dynamically routed to `VITE_BACKEND_URL`)*
+
 
 ---
 

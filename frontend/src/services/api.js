@@ -1,4 +1,7 @@
-const API_BASE = '/api';
+const RAW_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+export const BACKEND_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
+export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
+export const SPOTIFY_BASE = BACKEND_URL ? `${BACKEND_URL}/spotify` : '/spotify';
 
 export const api = {
   /**
@@ -90,11 +93,18 @@ export const api = {
   // ==================== SPOTIFY OAUTH & PLAYLIST API ====================
 
   /**
+   * Returns Spotify authorization entrypoint URL
+   */
+  getSpotifyAuthUrl() {
+    return `${SPOTIFY_BASE}/auth`;
+  },
+
+  /**
    * Checks current user's Spotify connection status
    */
   async getSpotifyStatus() {
     try {
-      const res = await fetch(`/spotify/status`, { credentials: 'include' });
+      const res = await fetch(`${SPOTIFY_BASE}/status`, { credentials: 'include' });
       if (!res.ok) return { connected: false, spotify_user: null };
       return await res.json();
     } catch (e) {
@@ -106,7 +116,7 @@ export const api = {
    * Disconnects/unlinks current user's Spotify account
    */
   async disconnectSpotify() {
-    const res = await fetch(`/spotify/disconnect`, {
+    const res = await fetch(`${SPOTIFY_BASE}/disconnect`, {
       method: 'POST',
       credentials: 'include'
     });
@@ -117,7 +127,7 @@ export const api = {
    * Retrieves all playlists for the authenticated Spotify user
    */
   async getSpotifyPlaylists() {
-    const res = await fetch(`/spotify/playlists`, { credentials: 'include' });
+    const res = await fetch(`${SPOTIFY_BASE}/playlists`, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to fetch Spotify playlists.');
@@ -129,7 +139,7 @@ export const api = {
    * Retrieves normalized tracklist for a playlist without starting download
    */
   async getPlaylistTracks(playlistId) {
-    const res = await fetch(`/spotify/playlists/${playlistId}/tracks`, { credentials: 'include' });
+    const res = await fetch(`${SPOTIFY_BASE}/playlists/${playlistId}/tracks`, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to fetch playlist tracks.');
@@ -146,7 +156,7 @@ export const api = {
     if (trackIds && trackIds.length > 0) {
       payload.track_ids = trackIds;
     }
-    const res = await fetch(`/spotify/playlists/${playlistId}/download`, {
+    const res = await fetch(`${SPOTIFY_BASE}/playlists/${playlistId}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -163,7 +173,7 @@ export const api = {
    * Dispatches single track download with DB caching & Serper candidate resolution
    */
   async downloadSingleSpotifyTrack({ song_name, artist_name, thumbnail, format = 'mp3-320' }) {
-    const res = await fetch(`/spotify/track/download`, {
+    const res = await fetch(`${SPOTIFY_BASE}/track/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -185,7 +195,7 @@ export const api = {
    * Polls batch playlist download job progress
    */
   async getPlaylistJobStatus(jobId) {
-    const res = await fetch(`/spotify/jobs/${jobId}`, { credentials: 'include' });
+    const res = await fetch(`${SPOTIFY_BASE}/jobs/${jobId}`, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to get playlist job status.');
@@ -198,7 +208,7 @@ export const api = {
    */
   async getLatestPlaylistJob() {
     try {
-      const res = await fetch(`/spotify/jobs/latest`, { credentials: 'include' });
+      const res = await fetch(`${SPOTIFY_BASE}/jobs/latest`, { credentials: 'include' });
       if (!res.ok) return null;
       const data = await res.json();
       return data.job || null;
@@ -212,6 +222,7 @@ export const api = {
    */
   getPlaylistZipUrl(jobId) {
     if (!jobId) return '';
-    return `/spotify/jobs/${jobId}/zip`;
+    return `${SPOTIFY_BASE}/jobs/${jobId}/zip`;
   }
 };
+

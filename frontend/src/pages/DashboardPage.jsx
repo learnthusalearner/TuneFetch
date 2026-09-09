@@ -180,7 +180,7 @@ export default function DashboardPage({ onGoHome }) {
   }, [activeJobId, setHistory]);
 
   /* ── Event handlers ────────────────────────────────────────── */
-  const handleSpotifyConnect = () => { window.location.href = '/spotify/auth'; };
+  const handleSpotifyConnect = () => { window.location.href = api.getSpotifyAuthUrl(); };
 
   const handleSpotifyDisconnect = async () => {
     try {

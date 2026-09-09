@@ -50,6 +50,21 @@ def unsign_session_id(signed_value: str) -> Optional[str]:
     except (BadSignature, Exception):
         return None
 
+def set_session_cookie(response: Response, user_id: str):
+    """Sets a cryptographically signed, HTTP-only session cookie."""
+    from app.core.config import FRONTEND_URL
+    is_secure = FRONTEND_URL.startswith("https") or os.getenv("ENVIRONMENT", "").lower() == "production"
+    signed_cookie = sign_session_id(user_id)
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=signed_cookie,
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 365,  # 1 year persistence
+        path="/"
+    )
+
 def get_current_user(
     request: Request,
     response: Response,
@@ -77,18 +92,11 @@ def get_current_user(
         db.refresh(user)
 
         # Set secure HTTP-only cookie
-        signed_cookie = sign_session_id(user.id)
-        response.set_cookie(
-            key=SESSION_COOKIE_NAME,
-            value=signed_cookie,
-            httponly=True,
-            samesite="lax",
-            max_age=60 * 60 * 24 * 365, # 1 year persistence
-            path="/"
-        )
+        set_session_cookie(response, user.id)
     else:
         # Update last seen timestamp
         user.last_seen_at = datetime.now(timezone.utc)
         db.commit()
 
     return user
+

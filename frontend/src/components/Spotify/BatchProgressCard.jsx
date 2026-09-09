@@ -5,6 +5,7 @@ import {
   Music, Check, Download, Clock, Sparkles, FolderDown,
 } from 'lucide-react';
 import { isDirectoryPickerSupported, saveZipAsFolder } from '../../utils/folderSaver';
+import { api } from '../../services/api';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 function formatEta(seconds) {
@@ -97,7 +98,8 @@ export default function BatchProgressCard({ job, onDismiss, onPlayAudio }) {
     setPcSaveSuccess(false);
     setPcSaveProgress({ current: 0, total: successful_tracks || 1, filename: 'Preparing…' });
     try {
-      const res  = await fetch(`/spotify/jobs/${id}/zip`);
+      const zipUrl = api.getPlaylistZipUrl(id);
+      const res  = await fetch(zipUrl);
       if (!res.ok) throw new Error('Could not download archive');
       const blob = await res.blob();
       await saveZipAsFolder(blob, 'TuneFetch_Music', prog => setPcSaveProgress(prog));
@@ -112,8 +114,9 @@ export default function BatchProgressCard({ job, onDismiss, onPlayAudio }) {
   const handleDownloadFolder = async (e) => {
     e?.preventDefault?.();
     setIsDownloadingFolder(true);
+    const zipUrl = api.getPlaylistZipUrl(id);
     try {
-      const res    = await fetch(`/spotify/jobs/${id}/zip`);
+      const res    = await fetch(zipUrl);
       if (!res.ok) throw new Error('Download failed');
       const blob   = await res.blob();
       const url    = window.URL.createObjectURL(blob);
@@ -125,7 +128,7 @@ export default function BatchProgressCard({ job, onDismiss, onPlayAudio }) {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch {
-      window.location.href = `/spotify/jobs/${id}/zip`;
+      window.location.href = zipUrl;
     } finally {
       setIsDownloadingFolder(false);
     }

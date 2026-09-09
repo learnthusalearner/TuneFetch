@@ -15,10 +15,10 @@ APP_TITLE = "TuneFetch Audio Engine"
 APP_DESCRIPTION = "High-performance, resource-capped backend powered by yt-dlp to extract high-fidelity MP3 and raw audio streams."
 APP_VERSION = "1.2.0"
 
-# Database Configuration (Neon PostgreSQL)
+# Database Configuration (Neon PostgreSQL or SQLite fallback)
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://neondb_owner:npg_Ft4NsXkSvh5f@ep-jolly-truth-avnf7grx-pooler.c-11.us-east-1.aws.neon.tech/neondb?sslmode=require"
+    f"sqlite:///{os.path.join(BASE_DIR, 'tunefetch_dev.db')}"
 )
 
 # Spotify OAuth Configuration
@@ -31,7 +31,7 @@ SPOTIFY_SCOPES = "playlist-read-private playlist-read-collaborative"
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 
 # Security & Session Secrets
-SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "tunefetch_super_secret_encryption_key_2026_secure")
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "tunefetch_dev_secret_key_change_in_production")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # Concurrency and Server Load Throttling
@@ -47,5 +47,17 @@ CLEANUP_INTERVAL_SECONDS = 60  # Sweeper interval for garbage collection daemon
 DEFAULT_BITRATE = "320"        # 320 kbps MP3 quality default
 ALLOWED_FORMATS = ["mp3-320", "mp3-256", "mp3-128", "best-audio"]
 
-# CORS configuration
-CORS_ORIGINS = ["*"]
+# CORS configuration: strict allowed origins with credentials support
+cors_env = os.getenv("CORS_ORIGINS", "")
+if cors_env:
+    CORS_ORIGINS = [orig.strip() for orig in cors_env.split(",") if orig.strip()]
+else:
+    CORS_ORIGINS = [
+        FRONTEND_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
+
