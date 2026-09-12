@@ -293,33 +293,25 @@ export default function PlaylistTracksModal({
               </button>
             )}
 
-            {/* Format Selector */}
-            <select
-              value={selectedFormat}
-              onChange={(e) => setSelectedFormat(e.target.value)}
+            {/* Quality Badge (Best Quality Forced) */}
+            <div
               style={{
-                padding: '9px 14px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid var(--border-glass)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                background: 'rgba(29, 185, 84, 0.1)',
+                border: '1px solid rgba(29, 185, 84, 0.3)',
                 borderRadius: '8px',
-                color: 'var(--text-primary)',
+                color: '#1DB954',
                 fontSize: '12px',
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
+                fontWeight: 700
               }}
+              title="All audio streams are automatically extracted at maximum 320 kbps bitrate"
             >
-              {(AUDIO_FORMATS || [
-                { id: 'mp3-320', label: 'MP3 • 320 kbps' },
-                { id: 'mp3-256', label: 'MP3 • 256 kbps' },
-                { id: 'mp3-128', label: 'MP3 • 128 kbps' },
-                { id: 'best-audio', label: 'Original Stream' }
-              ]).map((fmt) => (
-                <option key={fmt.id || fmt.value} value={fmt.id || fmt.value} style={{ background: '#101522', color: '#fff' }}>
-                  {fmt.label}
-                </option>
-              ))}
-            </select>
+              <Sparkles size={14} />
+              <span>320 kbps Ultra HQ MP3</span>
+            </div>
 
             {/* Desktop Direct Local Download Button (Recommended) */}
             <button

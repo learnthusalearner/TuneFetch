@@ -48,12 +48,20 @@ def open_browser_delayed(url: str, delay: float = 1.5):
 def run_cli_mode(code: str):
     import urllib.request
     import json
+    import warnings
+
+    # Suppress all internal logs and warnings so user sees only clean progress
+    warnings.filterwarnings("ignore")
+    logging.getLogger().setLevel(logging.ERROR)
+    logging.getLogger("downloader").setLevel(logging.ERROR)
+    logging.getLogger("local_batch_downloader").setLevel(logging.ERROR)
+
     clean_code = code.strip().upper()
     if not clean_code.startswith("TF-"):
         clean_code = f"TF-{clean_code}"
 
     print(f"\n======================================================================")
-    print(f"                  TuneFetch Terminal Downloader                       ")
+    print(f"               TuneFetch High-Fidelity Downloader v1.3                ")
     print(f"======================================================================\n")
     print(f"[*] Fetching playlist session '{clean_code}' from cloud server...")
 
@@ -74,25 +82,39 @@ def run_cli_mode(code: str):
         sys.exit(1)
 
     print(f"[+] Playlist:      {playlist_name} ({len(tracks)} tracks)")
-    print(f"[+] Target Folder: {USER_DOWNLOADS}\n")
+    print(f"[+] Quality:       320 kbps Ultra HQ MP3")
+    print(f"[+] Target Folder: {USER_DOWNLOADS}\\{playlist_name}\n")
 
     from app.services.local_batch_downloader import LocalBatchDownloader
     batch_id = LocalBatchDownloader.start_batch(playlist_name=playlist_name, tracks=tracks)
 
+    last_completed_count = 0
+
     while True:
         status = LocalBatchDownloader.get_batch_status(batch_id)
         if not status:
-            time.sleep(0.4)
+            time.sleep(0.3)
             continue
 
         b_status = status.get("status")
         total = status.get("total_tracks", len(tracks))
         completed = status.get("completed_tracks", 0)
-        cur_title = status.get("current_track_title", "Downloading...")
+        cur_title = status.get("current_track_title", "Preparing stream...")
         cur_prog = float(status.get("current_track_progress", 0.0) or 0.0)
         cur_speed = str(status.get("current_track_speed", "0 KB/s"))
         eta_sec = int(status.get("estimated_remaining_seconds", 0) or 0)
         elapsed_sec = int(status.get("elapsed_seconds", 0) or 0)
+        tracks_prog = status.get("tracks_progress", [])
+
+        # Print line for finished songs
+        if completed > last_completed_count:
+            for c_idx in range(last_completed_count, completed):
+                if c_idx < len(tracks_prog):
+                    t_info = tracks_prog[c_idx]
+                    t_name = f"{t_info.get('artist')} - {t_info.get('title')}" if t_info.get('artist') else t_info.get('title')
+                    sys.stdout.write(f"\r\033[K✓ [{c_idx+1}/{total}] Saved: {t_name}\n")
+                    sys.stdout.flush()
+            last_completed_count = completed
 
         # Print terminal progress line
         bar_len = 25
@@ -104,19 +126,21 @@ def run_cli_mode(code: str):
         eta_m = int(eta_sec // 60)
         eta_s = int(eta_sec % 60)
 
-        title_trunc = (cur_title[:28] + "..") if len(cur_title) > 30 else cur_title
-        sys.stdout.write(f"\r[{completed}/{total}] {title_trunc:<30} [{bar}] {int(cur_prog):>3}% | {cur_speed:>9} | ETA: {eta_m:02d}:{eta_s:02d}")
-        sys.stdout.flush()
+        title_trunc = (cur_title[:32] + "..") if len(cur_title) > 34 else cur_title
+        if b_status == "DOWNLOADING":
+            sys.stdout.write(f"\r\033[K► [{completed + 1}/{total}] {title_trunc:<34} [{bar}] {int(cur_prog):>3}% | {cur_speed:>9} | ETA: {eta_m:02d}:{eta_s:02d}")
+            sys.stdout.flush()
 
         if b_status == "COMPLETED":
-            print(f"\n\n======================================================================")
+            sys.stdout.write("\r\033[K")
+            print(f"\n======================================================================")
             print(f"  ✓ All {completed} songs downloaded into:")
             print(f"    {USER_DOWNLOADS}\\{playlist_name}")
-            print(f"  ⏱ Time taken: {mm:02d}:{ss:02d}")
+            print(f"  ⏱ Total Time: {mm:02d}:{ss:02d}")
             print(f"======================================================================\n")
             break
 
-        time.sleep(0.4)
+        time.sleep(0.35)
 
 def main():
     # If user passed session code via CLI argument: e.g. TuneFetch.exe TF-4982

@@ -4,10 +4,7 @@ export const STORAGE_KEYS = {
 };
 
 export const AUDIO_FORMATS = [
-  { id: 'mp3-320', label: 'MP3 • 320 kbps', badge: 'Ultra HQ', ext: '.mp3' },
-  { id: 'mp3-256', label: 'MP3 • 256 kbps', badge: 'High', ext: '.mp3' },
-  { id: 'mp3-128', label: 'MP3 • 128 kbps', badge: 'Fast', ext: '.mp3' },
-  { id: 'best-audio', label: 'Original Stream', badge: 'Direct', ext: '' },
+  { id: 'mp3-320', label: '320 kbps MP3 (Best Quality)', badge: 'Ultra HQ', ext: '.mp3' },
 ];
 
 export const PLATFORMS = {
