@@ -13,6 +13,7 @@ import {
   DownloadCloud
 } from 'lucide-react';
 import { api } from '../../services/api';
+import TuneFetchTerminal from '../terminal/TuneFetchTerminal';
 
 /**
  * HowItWorksSection
@@ -284,99 +285,7 @@ export default function HowItWorksSection({ onLaunch }) {
           </div>
 
           {/* Terminal Screen Body */}
-          <div
-            style={{
-              padding: '24px 28px',
-              fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
-              fontSize: '13.5px',
-              lineHeight: 1.7,
-              color: '#d1d5db',
-              minHeight: '340px',
-              overflowX: 'auto',
-              background: '#0d0e12'
-            }}
-          >
-            {/* Prompt Line */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
-              <span style={{ color: '#38bdf8', fontWeight: 700 }}>PS C:\Users\KIIT&gt;</span>
-              <span style={{ color: '#1ed760', fontWeight: 700, fontSize: '15px' }}>
-                tunefetch TF-8429
-              </span>
-              <span style={{ display: 'inline-block', width: '8px', height: '18px', background: '#1DB954', verticalAlign: 'middle' }} />
-            </div>
-
-            {/* Simulated Banner */}
-            <div style={{ color: '#1DB954', opacity: 0.9, marginBottom: '14px', whiteSpace: 'pre', fontSize: '12px' }}>
-{`======================================================================
-                 TuneFetch Desktop Engine v1.3.0                     
-         Spotify Playlist & High-Fidelity Audio Downloader            
-======================================================================`}
-            </div>
-
-            {/* Real-time Simulated Stages */}
-            {simStep >= 1 && (
-              <div style={{ color: '#38bdf8', marginBottom: '6px' }}>
-                [+] Contacting Neon Cloud Session API for code: <strong style={{ color: '#ffffff' }}>TF-8429</strong>...
-              </div>
-            )}
-
-            {simStep >= 2 && (
-              <div style={{ color: '#a855f7', marginBottom: '6px' }}>
-                [✓] Session Verified: &quot;Late Night Lo-Fi Chillout&quot; (24 Tracks Verified)
-              </div>
-            )}
-
-            {simStep >= 3 && (
-              <div style={{ color: '#9a9da8', marginBottom: '14px' }}>
-                [+] Destination Folder: <span style={{ color: '#f3f4f6' }}>C:\Users\KIIT\Downloads\Late Night Lo-Fi Chillout</span>
-              </div>
-            )}
-
-            {simStep >= 4 && (
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ffffff', marginBottom: '4px', fontSize: '13px' }}>
-                  <span>[+] [1/24] Sunset Lover - Petit Biscuit</span>
-                  <span style={{ color: '#1DB954', fontWeight: 700 }}>[COMPLETED ✓]</span>
-                </div>
-                <div style={{ color: '#6b7280', fontSize: '12px', paddingLeft: '16px' }}>
-                  ↳ 320 kbps CBR MP3 · 8.4 MB · Album Art Embedded · Saved
-                </div>
-              </div>
-            )}
-
-            {simStep >= 5 && (
-              <div style={{ marginBottom: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ffffff', marginBottom: '4px', fontSize: '13px' }}>
-                  <span>[+] [2/24] Midnight City - M83</span>
-                  <span style={{ color: '#38bdf8' }}>92% | 9.4 MB/s | ETA: 00:01</span>
-                </div>
-                {/* Live Ascii Progress Bar */}
-                <div style={{ color: '#1DB954', letterSpacing: '0.08em', fontSize: '12.5px' }}>
-                  [████████████████████████████████████░░] 92%
-                </div>
-              </div>
-            )}
-
-            {simStep >= 6 && (
-              <div
-                style={{
-                  marginTop: '18px',
-                  padding: '14px 18px',
-                  borderRadius: '10px',
-                  background: 'rgba(29, 185, 84, 0.08)',
-                  border: '1px solid rgba(29, 185, 84, 0.3)',
-                  color: '#e2e8f0'
-                }}
-              >
-                <div style={{ color: '#1ed760', fontWeight: 700, marginBottom: '4px' }}>
-                  [✓] 24 of 24 tracks converted successfully at 320 kbps!
-                </div>
-                <div style={{ fontSize: '12px', color: '#9a9da8' }}>
-                  Total Time: 01:14 · Destination: C:\Users\KIIT\Downloads\Late Night Lo-Fi Chillout
-                </div>
-              </div>
-            )}
-          </div>
+          <TuneFetchTerminal showControls={false} />
 
           {/* Terminal Bottom Explainer Banner */}
           <div

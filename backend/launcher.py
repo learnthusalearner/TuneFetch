@@ -46,10 +46,10 @@ os.environ["DOWNLOADS_DIR"] = str(USER_DOWNLOADS)
 
 def print_banner():
     print()
-    print("=" * 70)
-    print(f"                 {APP_NAME} Terminal Downloader v{APP_VERSION}")
-    print("         Spotify Playlist & High-Fidelity 320 kbps Audio")
-    print("=" * 70)
+    print("=" * 60)
+    print(f"           {APP_NAME} Desktop Engine v{APP_VERSION}")
+    print("   Spotify Playlist & High-Fidelity Audio Downloader")
+    print("=" * 60)
     print()
 
 
@@ -110,7 +110,7 @@ def run_cli_mode(code: str):
         clean_code = f"TF-{clean_code}"
 
     print_banner()
-    print(f"[*] Resolving cloud session '{clean_code}'...")
+    print(f"[+] Contacting Neon Cloud Session API for code: {clean_code}...")
 
     session = None
 
@@ -136,9 +136,8 @@ def run_cli_mode(code: str):
     tracks = session.get("tracks", [])
 
     playlist_folder = USER_DOWNLOADS / playlist_name
-    print(f"[✓] Playlist:      {playlist_name} ({len(tracks)} tracks)")
-    print(f"[+] Bitrate:       320 kbps CBR MP3 (Stereo, ID3v2 Tags)")
-    print(f"[+] Destination:   {playlist_folder}")
+    print(f"[✓] Session Verified: \"{playlist_name}\" ({len(tracks)} Tracks Verified)")
+    print(f"[+] Destination Folder: {playlist_folder}")
     print()
 
     # Enable UTF-8 on Windows terminal if supported
@@ -199,19 +198,20 @@ def run_cli_mode(code: str):
                 full_t = f"{t_artist} - {t_title}" if t_artist else t_title
                 full_t_clean = (full_t[:46] + "..") if len(full_t) > 48 else full_t
                 if t_status == "COMPLETED":
-                    print(f"  [✓] [{i+1}/{total}] {full_t_clean:<48} (Saved 320 kbps MP3)")
+                    print(f"[+] [{i+1}/{total}] {full_t_clean:<48} [COMPLETED ✓]")
+                    print(f"    ↳ 320 kbps CBR MP3 · Album Art Embedded · Saved")
                 else:
-                    print(f"  [✕] [{i+1}/{total}] {full_t_clean:<48} (Skipped - Issue)")
+                    print(f"[-] [{i+1}/{total}] {full_t_clean:<48} [SKIPPED]")
                 sys.stdout.flush()
 
         # Active progress bar for currently downloading song
         if b_status == "DOWNLOADING":
             curr_idx = min(total, processed + 1)
-            bar = format_progress_bar(current_progress, width=20)
-            short_title = (current_title[:30] + "..") if len(current_title) > 32 else current_title
+            bar = format_progress_bar(current_progress, width=34)
+            short_title = (current_title[:28] + "..") if len(current_title) > 30 else current_title
 
             sys.stdout.write(
-                f"\r\033[K[↓] [{curr_idx}/{total}] {short_title:<32} [{bar}] {int(current_progress):>3}% | {current_speed:>10} | ETA: {eta_m:02d}:{eta_s:02d}"
+                f"\r\033[K[+] [{curr_idx}/{total}] {short_title:<30} {int(current_progress):>3}% | {current_speed:>8} | ETA: {eta_m:02d}:{eta_s:02d}\n[{bar}] {int(current_progress):>3}%\033[F"
             )
             sys.stdout.flush()
 
@@ -228,17 +228,15 @@ def run_cli_mode(code: str):
                     full_t = f"{t_artist} - {t_title}" if t_artist else t_title
                     full_t_clean = (full_t[:46] + "..") if len(full_t) > 48 else full_t
                     if t_status == "COMPLETED":
-                        print(f"  [✓] [{i+1}/{total}] {full_t_clean:<48} (Saved 320 kbps MP3)")
+                        print(f"[+] [{i+1}/{total}] {full_t_clean:<48} [COMPLETED ✓]")
+                        print(f"    ↳ 320 kbps CBR MP3 · Album Art Embedded · Saved")
                     else:
-                        print(f"  [✕] [{i+1}/{total}] {full_t_clean:<48} (Skipped - Issue)")
+                        print(f"[-] [{i+1}/{total}] {full_t_clean:<48} [SKIPPED]")
 
-            sys.stdout.write("\r\033[K")
+            sys.stdout.write("\r\033[K\n")
             print()
-            print("=" * 70)
-            print(f"[✓] Successfully processed {total} tracks ({completed} saved, {failed} skipped)")
-            print(f"[+] Folder: {playlist_folder}")
-            print(f"[TIME] Total Time: {elapsed_m:02d}:{elapsed_s:02d}")
-            print("=" * 70)
+            print(f"[✓] {completed} of {total} tracks converted successfully at 320 kbps!")
+            print(f"Total Time: {elapsed_m:02d}:{elapsed_s:02d} · Destination: {playlist_folder}")
             print()
             break
 

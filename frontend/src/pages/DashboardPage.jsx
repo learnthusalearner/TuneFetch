@@ -49,6 +49,23 @@ export default function DashboardPage({ onGoHome }) {
     try { return localStorage.getItem(STORAGE_KEYS.SPOTIFY_ACTIVE_JOB) || null; } catch { return null; }
   });
   const [activeJob, setActiveJob] = useState(null);
+  const [localBatchId, setLocalBatchId] = useState(null);
+
+  /* ── Download History ──────────────────────────────────────── */
+  const [history, setHistory] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.HISTORY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+    } catch {}
+  }, [history]);
 
   /* ── Helpers ───────────────────────────────────────────────── */
   const pushToast = useCallback((message, type = 'success') => {
@@ -113,12 +130,13 @@ export default function DashboardPage({ onGoHome }) {
         const code = clean.startsWith('TF-') ? clean : `TF-${clean}`;
         api.importSessionToLocalDesktop(code)
           .then((data) => {
-            setLocalBatchId(data.batch_id);
-            pushToast(`Imported session ${code} (${data.total_tracks} tracks)! Downloading to 'Thanks for downloading' folder...`, 'success');
+            if (data?.batch_id) setLocalBatchId(data.batch_id);
+            pushToast(`Imported session ${code} (${data?.total_tracks || 'all'} tracks)!`, 'success');
             window.history.replaceState({}, document.title, window.location.pathname);
           })
-          .catch((err) => {
-            setGeneralError(`Could not auto-import session ${code}: ${err.message}`);
+          .catch(() => {
+            pushToast(`Session code ${code} ready. Run 'tunefetch ${code}' in your terminal!`, 'info');
+            window.history.replaceState({}, document.title, window.location.pathname);
           });
       }
     } catch {}
@@ -198,7 +216,7 @@ export default function DashboardPage({ onGoHome }) {
       } catch {}
     }, 1500);
     return () => { mounted = false; clearInterval(iv); };
-  }, [activeJobId, setHistory]);
+  }, [activeJobId, pushToast]);
 
   /* ── Event handlers ────────────────────────────────────────── */
   const handleSpotifyConnect = () => { window.location.href = api.getSpotifyAuthUrl(); };
@@ -516,6 +534,7 @@ export default function DashboardPage({ onGoHome }) {
             isOpen={Boolean(selectedPlaylistForModal)}
             onClose={() => { setSelectedPlaylistForModal(null); setExtractedTracks(null); }}
             onDownloadSingleTrack={handleDownloadSingleTrack}
+            onStartDownload={handleStartBatchDownload}
             isLoadingTracks={isLoadingTracks}
             downloadingTrackId={downloadingTrackId}
           />

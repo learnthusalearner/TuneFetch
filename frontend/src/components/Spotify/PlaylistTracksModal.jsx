@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { AUDIO_FORMATS } from '../../constants';
 import { api } from '../../services/api';
+import TuneFetchTerminal from '../terminal/TuneFetchTerminal';
 
 export default function PlaylistTracksModal({
   playlist,
@@ -12,6 +13,7 @@ export default function PlaylistTracksModal({
   isOpen,
   onClose,
   onDownloadSingleTrack,
+  onStartDownload,
   isLoadingTracks,
   downloadingTrackId
 }) {
@@ -25,6 +27,7 @@ export default function PlaylistTracksModal({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [showTerminalPreview, setShowTerminalPreview] = useState(false);
 
   if (!isOpen) return null;
 
@@ -550,7 +553,8 @@ export default function PlaylistTracksModal({
             className="glass-panel"
             style={{
               width: '100%',
-              maxWidth: '520px',
+              maxWidth: showTerminalPreview ? '760px' : '520px',
+              transition: 'max-width 0.3s ease',
               padding: '28px',
               background: '#111726',
               border: '1px solid rgba(29, 185, 84, 0.35)',
@@ -724,6 +728,40 @@ export default function PlaylistTracksModal({
                 {copiedCommand ? <Check size={13} /> : <Copy size={13} />}
                 <span>{copiedCommand ? 'Copied!' : 'Copy Command'}</span>
               </button>
+            </div>
+
+            {/* Terminal Live Preview Toggle */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowTerminalPreview(!showTerminalPreview)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#38bdf8',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>{showTerminalPreview ? '▼ Hide Terminal Preview' : '► Preview Terminal Downloader View'}</span>
+              </button>
+
+              {showTerminalPreview && (
+                <div style={{ maxHeight: '360px', overflowY: 'auto', borderRadius: '10px' }}>
+                  <TuneFetchTerminal
+                    sessionCode={cloudSessionCode}
+                    playlistName={playlist?.name}
+                    trackCount={tracks?.length || 0}
+                    tracks={tracks}
+                    showControls={false}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Alternative Copy JSON Button */}
