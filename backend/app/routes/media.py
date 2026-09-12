@@ -70,7 +70,10 @@ def delete_user_cookies(
     }
 
 @router.post("/info")
-def fetch_info(req: InfoRequest):
+def fetch_info(
+    req: InfoRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     Extracts metadata, durations, thumbnails, and tracks for single media or playlists.
     """

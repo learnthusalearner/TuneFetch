@@ -298,24 +298,33 @@ def configure_urllib_network(use_proxy: bool = False, custom_cookies: Optional[h
 # Initialize standard opener without forcing proxy globally
 configure_urllib_network(use_proxy=False)
 
-CLIENT_FALLBACK_ORDER = ["MWEB", "VISION_OS", "ANDROID_VR", "WEB", "IOS"]
+CLIENT_FALLBACK_ORDER = ["VISION_OS", "MWEB", "WEB", "IOS", "ANDROID_VR"]
 
 def build_pytubefix_instance(
     url: str,
-    client: str = "MWEB",
+    client: str = "VISION_OS",
     on_progress_callback=None,
-    on_complete_callback=None
+    on_complete_callback=None,
+    po_token: Optional[str] = None
 ) -> YouTube:
     """
     Constructs a pytubefix YouTube object.
     Urllib opener is dynamically configured with cookies and proxies in configure_urllib_network
     to prevent install_proxy from stripping the HTTPCookieProcessor.
+    Supports botGuard PO tokens when needed for web clients.
     """
+    verifier = None
+    if po_token:
+        def verifier():
+            return "", po_token
+
     return YouTube(
         url,
         client=client,
         on_progress_callback=on_progress_callback,
-        on_complete_callback=on_complete_callback
+        on_complete_callback=on_complete_callback,
+        use_po_token=bool(po_token),
+        po_token_verifier=verifier if po_token else None
     )
 
 def fetch_youtube_with_fallback(
@@ -326,8 +335,8 @@ def fetch_youtube_with_fallback(
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
-    Prioritizes TV_SIMPLY (zero bot detection, high stability, 128kbps AAC) followed by
-    WEB_SAFARI, MWEB, ANDROID_VR, VISION_OS, IOS, and WEB.
+    Prioritizes VISION_OS (zero bot detection, require_po_token=False, 128kbps AAC) followed by
+    MWEB, WEB, IOS, and ANDROID_VR.
     Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully to direct.
     Accepts user session custom_cookies for temporary authenticated download execution.
     Returns (yt_instance, best_audio_stream).
@@ -344,6 +353,16 @@ def fetch_youtube_with_fallback(
     if not cookie_jar:
         cookie_jar = get_cookie_jar()
 
+    # Pre-generate botGuard PO token for web clients fallback if needed
+    po_token = None
+    try:
+        from pytubefix.botGuard.bot_guard import generate_po_token
+        from pytubefix import extract
+        vid_id = extract.video_id(url)
+        po_token = generate_po_token(vid_id)
+    except Exception:
+        po_token = None
+
     # Try with proxy (if configured), then direct if proxy throws an auth/network failure
     proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
 
@@ -355,7 +374,8 @@ def fetch_youtube_with_fallback(
                     url=url,
                     client=client_name,
                     on_progress_callback=on_progress_callback,
-                    on_complete_callback=on_complete_callback
+                    on_complete_callback=on_complete_callback,
+                    po_token=po_token if client_name in ["MWEB", "WEB"] else None
                 )
 
                 # Accessing title forces basic metadata extraction
@@ -464,7 +484,27 @@ class DownloadManager:
             except Exception as s_err:
                 raise ValueError(f"Search failed for '{url}': {s_err}")
 
-        # 4. Single video / audio metadata resolution with client fallback
+        # 4. Single video / audio metadata resolution (fast, unblocked oEmbed first)
+        if "youtube.com" in target_url or "youtu.be" in target_url:
+            try:
+                import urllib.parse
+                oembed_url = f"https://www.youtube.com/oembed?url={urllib.parse.quote(target_url)}&format=json"
+                req = urllib.request.Request(oembed_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    return {
+                        "is_playlist": False,
+                        "platform": "youtube",
+                        "title": data.get("title") or "YouTube Video",
+                        "artist": data.get("author_name") or "YouTube Creator",
+                        "thumbnail": data.get("thumbnail_url") or "",
+                        "duration": 0,
+                        "original_url": target_url,
+                        "formats": ["mp3-320", "mp3-256", "mp3-128", "best-audio"]
+                    }
+            except Exception as oembed_err:
+                logger.debug(f"oEmbed resolution skipped: {oembed_err}")
+
         yt, stream = fetch_youtube_with_fallback(target_url)
         return {
             "is_playlist": False,
