@@ -18,6 +18,33 @@ def _sanitize_folder_name(name: str) -> str:
     cleaned = "".join(c for c in name if c.isalnum() or c in " ._-()").strip()
     return cleaned[:80] or "TuneFetch_Playlist"
 
+def _report_broken_track_to_backend(song_name: str, artist_name: str, error_msg: str):
+    """
+    Sends a POST notification to the production database flagging broken tracks
+    so the developer can replace the URL.
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.services.serper_service import SerperService
+        db = SessionLocal()
+        try:
+            SerperService.report_broken_track(song_name, artist_name, error_msg, db)
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+    try:
+        import httpx
+        prod_url = "https://tune-fetch-production.up.railway.app/spotify/tracks/report-broken"
+        httpx.post(
+            prod_url,
+            json={"song_name": song_name, "artist_name": artist_name, "error_message": error_msg},
+            timeout=5.0
+        )
+    except Exception:
+        pass
+
 class LocalBatchDownloader:
     @classmethod
     def start_batch(
@@ -191,36 +218,39 @@ class LocalBatchDownloader:
                         break
 
                     elif t_status == "error":
+                        _report_broken_track_to_backend(song_name, artist_name, t_error or "Download failed")
                         with _local_batches_lock:
                             if batch_id in _local_batches:
                                 b = _local_batches[batch_id]
                                 b["failed_tracks"] += 1
                                 if idx < len(b["tracks_progress"]):
                                     b["tracks_progress"][idx]["status"] = "ERROR"
-                                    b["tracks_progress"][idx]["error"] = t_error or "Download failed"
+                                    b["tracks_progress"][idx]["error"] = "Facing download issue. A notification has been sent to the developer for a URL fix."
                         finished = True
                         break
 
                     time.sleep(0.4)
 
                 if not finished:
+                    _report_broken_track_to_backend(song_name, artist_name, "Download timeout after 3 minutes")
                     with _local_batches_lock:
                         if batch_id in _local_batches:
                             b = _local_batches[batch_id]
                             b["failed_tracks"] += 1
                             if idx < len(b["tracks_progress"]):
                                 b["tracks_progress"][idx]["status"] = "TIMEOUT"
-                                b["tracks_progress"][idx]["error"] = "Track download timed out after 3 minutes"
+                                b["tracks_progress"][idx]["error"] = "Facing download issue. A notification has been sent to the developer for a URL fix."
 
             except Exception as trk_err:
                 logger.error(f"Error downloading track '{song_name}': {trk_err}")
+                _report_broken_track_to_backend(song_name, artist_name, str(trk_err))
                 with _local_batches_lock:
                     if batch_id in _local_batches:
                         b = _local_batches[batch_id]
                         b["failed_tracks"] += 1
                         if idx < len(b["tracks_progress"]):
                             b["tracks_progress"][idx]["status"] = "ERROR"
-                            b["tracks_progress"][idx]["error"] = str(trk_err)
+                            b["tracks_progress"][idx]["error"] = "Facing download issue. A notification has been sent to the developer for a URL fix."
 
         with _local_batches_lock:
             if batch_id in _local_batches:

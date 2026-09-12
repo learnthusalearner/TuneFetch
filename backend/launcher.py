@@ -145,7 +145,7 @@ def run_cli_mode(code: str):
                     if t_st == "COMPLETED":
                         sys.stdout.write(f"\r\033[K[✓] [{c_idx+1}/{total}] Saved: {t_name}\n")
                     else:
-                        sys.stdout.write(f"\r\033[K[!] [{c_idx+1}/{total}] Skipped ({t_st}): {t_name}\n")
+                        sys.stdout.write(f"\r\033[K[!] [{c_idx+1}/{total}] ERROR downloading '{t_name}': Facing a download issue. A notification message has been sent to the developer database for fixing this song.\n")
                     sys.stdout.flush()
             last_processed_count = processed
 

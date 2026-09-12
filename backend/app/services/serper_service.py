@@ -61,8 +61,16 @@ class SerperService:
                     ResolvedSong.artist_name_clean == artist_key
                 ).first()
                 if cached and cached.candidate_url:
-                    logger.info(f"[DB Cache Hit] Reusing stored candidate URL for '{clean_song}' by '{clean_artist}': {cached.candidate_url}")
-                    return cached.candidate_url
+                    # Developer fixed URL takes absolute highest priority
+                    if getattr(cached, "developer_fixed", False):
+                        logger.info(f"[DB Developer Override Hit] Using developer-fixed URL for '{clean_song}' by '{clean_artist}': {cached.candidate_url}")
+                        return cached.candidate_url
+                    # Non-flagged valid cache hit
+                    elif not getattr(cached, "is_flagged", False):
+                        logger.info(f"[DB Cache Hit] Reusing stored candidate URL for '{clean_song}' by '{clean_artist}': {cached.candidate_url}")
+                        return cached.candidate_url
+                    else:
+                        logger.warning(f"[DB Cache Flagged] Song '{clean_song}' by '{clean_artist}' was flagged broken. Re-querying Serper API for a fresh candidate URL.")
             except Exception as db_err:
                 logger.warning(f"Error reading from resolved_songs DB cache: {db_err}")
 
@@ -138,11 +146,13 @@ class SerperService:
                         artist_name=clean_artist,
                         song_name_clean=song_key,
                         artist_name_clean=artist_key,
-                        candidate_url=candidate_url
+                        candidate_url=candidate_url,
+                        is_flagged=False
                     )
                     db.add(cached_entry)
                 else:
                     cached_entry.candidate_url = candidate_url
+                    cached_entry.is_flagged = False
                 db.commit()
                 logger.info(f"[DB Cache Stored] Saved '{clean_song}' by '{clean_artist}' -> {candidate_url}")
             except Exception as save_err:
@@ -150,3 +160,88 @@ class SerperService:
                 db.rollback()
 
         return candidate_url
+
+    @staticmethod
+    def report_broken_track(song_name: str, artist_name: str, error_message: str, db: Session) -> dict:
+        """
+        Flags a track in the database as broken when a download failure occurs,
+        notifying developers for inspection and URL replacement.
+        """
+        clean_song = song_name.strip()
+        clean_artist = (artist_name or "").strip()
+        song_key = clean_song.lower()
+        artist_key = clean_artist.lower()
+
+        try:
+            record = db.query(ResolvedSong).filter(
+                ResolvedSong.song_name_clean == song_key,
+                ResolvedSong.artist_name_clean == artist_key
+            ).first()
+
+            if not record:
+                record = ResolvedSong(
+                    song_name=clean_song,
+                    artist_name=clean_artist,
+                    song_name_clean=song_key,
+                    artist_name_clean=artist_key,
+                    candidate_url="",
+                    is_flagged=True,
+                    flag_reason=error_message[:500],
+                    developer_fixed=False
+                )
+                db.add(record)
+            else:
+                record.is_flagged = True
+                record.flag_reason = error_message[:500]
+                record.developer_fixed = False
+
+            db.commit()
+            logger.warning(f"[BROKEN TRACK REPORTED] Song: '{clean_song}' by '{clean_artist}' flagged for developer review. Error: {error_message}")
+            return {"status": "reported", "song": clean_song, "artist": clean_artist}
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to flag broken track '{clean_song}': {e}")
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def apply_developer_fix(song_name: str, artist_name: str, new_candidate_url: str, db: Session) -> dict:
+        """
+        Updates the candidate URL for a song, unflagging it and marking it as developer-fixed.
+        Subsequent downloads by any user will instantly use this developer-provided URL!
+        """
+        clean_song = song_name.strip()
+        clean_artist = (artist_name or "").strip()
+        song_key = clean_song.lower()
+        artist_key = clean_artist.lower()
+
+        try:
+            record = db.query(ResolvedSong).filter(
+                ResolvedSong.song_name_clean == song_key,
+                ResolvedSong.artist_name_clean == artist_key
+            ).first()
+
+            if not record:
+                record = ResolvedSong(
+                    song_name=clean_song,
+                    artist_name=clean_artist,
+                    song_name_clean=song_key,
+                    artist_name_clean=artist_key,
+                    candidate_url=new_candidate_url.strip(),
+                    is_flagged=False,
+                    flag_reason=None,
+                    developer_fixed=True
+                )
+                db.add(record)
+            else:
+                record.candidate_url = new_candidate_url.strip()
+                record.is_flagged = False
+                record.flag_reason = None
+                record.developer_fixed = True
+
+            db.commit()
+            logger.info(f"[DEVELOPER FIX APPLIED] Song: '{clean_song}' by '{clean_artist}' updated to URL: {new_candidate_url}")
+            return {"status": "success", "message": f"Updated '{clean_song}' candidate URL to {new_candidate_url}"}
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed applying developer fix for '{clean_song}': {e}")
+            return {"status": "error", "message": str(e)}

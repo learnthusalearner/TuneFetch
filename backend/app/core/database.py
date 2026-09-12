@@ -35,22 +35,28 @@ def get_db():
         db.close()
 
 def init_db():
-    """Initializes all database tables in Neon PostgreSQL."""
+    """Initializes all database tables in Neon PostgreSQL or local SQLite."""
     try:
         import app.models.db_models  # noqa
         Base.metadata.create_all(bind=engine)
         
         # Safely ensure newly added columns exist if table was already created
         from sqlalchemy import text
-        with engine.connect() as conn:
+        for col_stmt in [
+            "ALTER TABLE playlist_download_jobs ADD COLUMN zip_path VARCHAR(512);",
+            "ALTER TABLE playlist_download_jobs ADD COLUMN zip_filename VARCHAR(256);",
+            "ALTER TABLE users ADD COLUMN cookies_encrypted TEXT;",
+            "ALTER TABLE resolved_songs ADD COLUMN is_flagged BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE resolved_songs ADD COLUMN flag_reason TEXT;",
+            "ALTER TABLE resolved_songs ADD COLUMN developer_fixed BOOLEAN DEFAULT FALSE;"
+        ]:
             try:
-                conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_path VARCHAR(512);"))
-                conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_filename VARCHAR(256);"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cookies_encrypted TEXT;"))
-                conn.commit()
-            except Exception as mig_err:
-                logger.debug(f"Column migration check note: {mig_err}")
+                with engine.connect() as conn:
+                    conn.execute(text(col_stmt))
+                    conn.commit()
+            except Exception:
+                pass
 
-        logger.info("Database schema synchronized with Neon PostgreSQL successfully.")
+        logger.info("Database schema synchronized successfully.")
     except Exception as e:
         logger.error(f"Error during database initialization: {e}", exc_info=True)

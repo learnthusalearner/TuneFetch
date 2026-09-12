@@ -313,3 +313,72 @@ def download_playlist_zip(
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )
+
+class ReportBrokenTrackRequest(BaseModel):
+    song_name: str
+    artist_name: Optional[str] = ""
+    error_message: Optional[str] = "Download failed"
+
+class DeveloperFixTrackRequest(BaseModel):
+    song_name: str
+    artist_name: Optional[str] = ""
+    new_candidate_url: str
+
+@router.post("/tracks/report-broken")
+def report_broken_track(
+    payload: ReportBrokenTrackRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    POST request sent by client/backend when a song encounters a download error.
+    Flags the song in the PostgreSQL database for developer inspection.
+    """
+    res = SerperService.report_broken_track(
+        song_name=payload.song_name,
+        artist_name=payload.artist_name or "",
+        error_message=payload.error_message or "Download failed",
+        db=db
+    )
+    return {"success": True, "data": res}
+
+@router.post("/tracks/developer-fix")
+def apply_developer_fix(
+    payload: DeveloperFixTrackRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    POST request sent by developer to assign the correct working YouTube URL for a flagged track.
+    Unflags the track and forces future user downloads to use this new URL.
+    """
+    res = SerperService.apply_developer_fix(
+        song_name=payload.song_name,
+        artist_name=payload.artist_name or "",
+        new_candidate_url=payload.new_candidate_url,
+        db=db
+    )
+    return {"success": True, "data": res}
+
+@router.get("/tracks/flagged")
+def list_flagged_tracks(
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all songs flagged as broken so developers can inspect and provide working URLs.
+    """
+    from app.models.db_models import ResolvedSong
+    flagged = db.query(ResolvedSong).filter(ResolvedSong.is_flagged == True).all()
+    return {
+        "success": True,
+        "count": len(flagged),
+        "tracks": [
+            {
+                "id": t.id,
+                "song_name": t.song_name,
+                "artist_name": t.artist_name,
+                "candidate_url": t.candidate_url,
+                "flag_reason": t.flag_reason,
+                "created_at": t.created_at
+            }
+            for t in flagged
+        ]
+    }

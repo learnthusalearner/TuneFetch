@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -68,6 +68,9 @@ class ResolvedSong(Base):
     song_name_clean = Column(String(256), nullable=False, index=True)
     artist_name_clean = Column(String(256), nullable=False, index=True)
     candidate_url = Column(Text, nullable=False)
+    is_flagged = Column(Boolean, default=False, index=True)
+    flag_reason = Column(Text, nullable=True)
+    developer_fixed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
