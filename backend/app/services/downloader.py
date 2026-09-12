@@ -178,13 +178,14 @@ def build_pytubefix_instance(
     url: str,
     client: str = "MWEB",
     on_progress_callback=None,
-    on_complete_callback=None
+    on_complete_callback=None,
+    use_proxy: bool = True
 ) -> YouTube:
     """
-    Constructs a pytubefix YouTube object with proxy configuration.
+    Constructs a pytubefix YouTube object with optional proxy configuration.
     """
     proxy_dict = None
-    if ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
+    if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
         proxy_dict = {
             "http": ROTATING_PROXY_URL.strip(),
             "https": ROTATING_PROXY_URL.strip()
@@ -205,6 +206,7 @@ def fetch_youtube_with_fallback(
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
+    Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully.
     Leverages built-in botGuard PO token generation when available to bypass bot detection.
     Prioritizes stable non-SABR direct audio streams for reliable downloads.
     Returns (yt_instance, best_audio_stream).
@@ -213,44 +215,49 @@ def fetch_youtube_with_fallback(
     last_err = None
     po_token_cache = None
 
-    for client_name in CLIENT_FALLBACK_ORDER:
-        try:
-            yt = build_pytubefix_instance(
-                url=url,
-                client=client_name,
-                on_progress_callback=on_progress_callback,
-                on_complete_callback=on_complete_callback
-            )
+    # Try with proxy (if configured), then direct if proxy throws an auth/network failure
+    proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
 
-            # Auto-generate PO token via botGuard if not already generated
+    for use_proxy in proxy_attempts:
+        for client_name in CLIENT_FALLBACK_ORDER:
             try:
-                if not po_token_cache:
-                    from pytubefix.botGuard.bot_guard import generate_po_token
-                    po_token_cache = generate_po_token(yt.video_id)
-                if po_token_cache:
-                    yt.po_token = po_token_cache
-            except Exception as pot_err:
-                logger.debug(f"Auto PO token generation skipped: {pot_err}")
+                yt = build_pytubefix_instance(
+                    url=url,
+                    client=client_name,
+                    on_progress_callback=on_progress_callback,
+                    on_complete_callback=on_complete_callback,
+                    use_proxy=use_proxy
+                )
 
-            # Accessing title forces basic metadata extraction
-            _ = yt.title
+                # Auto-generate PO token via botGuard if not already generated
+                try:
+                    if not po_token_cache:
+                        from pytubefix.botGuard.bot_guard import generate_po_token
+                        po_token_cache = generate_po_token(yt.video_id)
+                    if po_token_cache:
+                        yt.po_token = po_token_cache
+                except Exception as pot_err:
+                    logger.debug(f"Auto PO token generation skipped: {pot_err}")
 
-            # First priority: non-SABR audio streams for maximum download stability
-            all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
-            non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
-            if non_sabr_streams:
-                return yt, non_sabr_streams[0]
+                # Accessing title forces basic metadata extraction
+                _ = yt.title
 
-            # Second priority: standard audio stream
-            stream = yt.streams.get_audio_only()
-            if stream:
-                return yt, stream
+                # First priority: non-SABR audio streams for maximum download stability
+                all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+                non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+                if non_sabr_streams:
+                    return yt, non_sabr_streams[0]
 
-            if all_audio and len(all_audio) > 0:
-                return yt, all_audio.first()
-        except Exception as err:
-            last_err = err
-            logger.debug(f"Pytubefix client '{client_name}' failed for '{url}': {err}")
+                # Second priority: standard audio stream
+                stream = yt.streams.get_audio_only()
+                if stream:
+                    return yt, stream
+
+                if all_audio and len(all_audio) > 0:
+                    return yt, all_audio.first()
+            except Exception as err:
+                last_err = err
+                logger.debug(f"Pytubefix client '{client_name}' (proxy={use_proxy}) failed for '{url}': {err}")
 
     raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
