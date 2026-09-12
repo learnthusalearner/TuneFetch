@@ -324,6 +324,16 @@ export default function DashboardPage({ onGoHome }) {
     handleCloseCookieModal();
   };
 
+  const handleClearCookies = async () => {
+    try {
+      await api.clearUserCookies();
+      setCookieStatus({ has_cookies: false, count: 0 });
+      pushToast('YouTube verification cookies cleared.');
+    } catch {
+      pushToast('Failed clearing cookies.', 'error');
+    }
+  };
+
   const handleDismissBatchJob = () => {
     setActiveJob(null);
     setActiveJobId(null);
@@ -389,8 +399,8 @@ export default function DashboardPage({ onGoHome }) {
           )}
         </AnimatePresence>
 
-        {/* Ephemeral YouTube Cookie Alert Banner (always visible when cookies are absent) */}
-        {!cookieStatus.has_cookies && (
+        {/* Ephemeral YouTube Cookie Alert Banner */}
+        {!cookieStatus.has_cookies ? (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -413,7 +423,7 @@ export default function DashboardPage({ onGoHome }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Cookie size={18} style={{ color: '#facc15', flexShrink: 0 }} />
               <span>
-                <strong>YouTube Verification Cookies:</strong> Paste your <code>cookies.txt</code> to bypass bot detection on production downloads. They are stored only in memory and auto-deleted immediately after completion.
+                <strong>YouTube Verification Cookies:</strong> Paste or upload your <code>cookies.txt</code> to bypass YouTube bot blocks on production.
               </span>
             </div>
             <button
@@ -436,8 +446,68 @@ export default function DashboardPage({ onGoHome }) {
               }}
             >
               <Cookie size={13} />
-              <span>Paste cookies.txt</span>
+              <span>Paste / Upload cookies.txt</span>
             </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '10px 18px',
+              borderRadius: '14px',
+              background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.05) 100%)',
+              border: '1px solid rgba(52, 211, 153, 0.28)',
+              color: '#6ee7b7',
+              fontSize: '12.5px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Cookie size={17} style={{ color: '#34d399', flexShrink: 0 }} />
+              <span>
+                <strong>YouTube Cookies Active:</strong> {cookieStatus.count} verification cookies active for your session.
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowCookieModal(true)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#fff'
+                }}
+              >
+                Update
+              </button>
+              <button
+                type="button"
+                onClick={handleClearCookies}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: '#fca5a5'
+                }}
+              >
+                Clear Cookies
+              </button>
+            </div>
           </motion.div>
         )}
 

@@ -15,9 +15,15 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Pre-fetch Spotify status so LandingPage can show "connected" pill
+  // Pre-fetch Spotify status and auto-route to dashboard if already connected
   useEffect(() => {
-    api.getSpotifyStatus().then(setSpotifyStatus).catch(() => {});
+    api.getSpotifyStatus().then((status) => {
+      setSpotifyStatus(status);
+      if (status?.connected && location.pathname === '/') {
+        // User already connected Spotify! Jump straight to dashboard
+        navigate('/dashboard', { replace: true });
+      }
+    }).catch(() => {});
 
     // If redirected back from Spotify OAuth, jump straight to /dashboard
     const params = new URLSearchParams(window.location.search);

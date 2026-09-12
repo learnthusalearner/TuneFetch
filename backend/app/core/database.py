@@ -46,6 +46,7 @@ def init_db():
             try:
                 conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_path VARCHAR(512);"))
                 conn.execute(text("ALTER TABLE playlist_download_jobs ADD COLUMN IF NOT EXISTS zip_filename VARCHAR(256);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cookies_encrypted TEXT;"))
                 conn.commit()
             except Exception as mig_err:
                 logger.debug(f"Column migration check note: {mig_err}")

@@ -943,13 +943,8 @@ class DownloadManager:
                     except Exception:
                         pass
 
-                if user_id_to_clean:
-                    try:
-                        from app.services.user_cookie_store import UserCookieStore
-                        UserCookieStore.delete_cookies(user_id_to_clean)
-                        logger.info(f"[AutoClean] Purged temporary cookies for user {user_id_to_clean} following single file delivery.")
-                    except Exception:
-                        pass
+                # Note: User session cookies are preserved for the active session
+                # to allow downloading multiple songs without re-authenticating every track.
             except Exception as e:
                 logger.warning(f"[AutoClean] Error during deferred deletion for task {task_id}: {e}")
 

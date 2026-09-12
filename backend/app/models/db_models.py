@@ -16,6 +16,7 @@ class User(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid, index=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)
     last_seen_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    cookies_encrypted = Column(Text, nullable=True) # Encrypted YouTube verification cookies for session downloads
 
     # Relationships
     spotify_account = relationship("SpotifyAccount", back_populates="user", uselist=False, cascade="all, delete-orphan")
