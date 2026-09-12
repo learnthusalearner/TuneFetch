@@ -218,6 +218,31 @@ export const api = {
   },
 
   /**
+   * Fully logs out current user: unlinks Spotify on backend,
+   * purges local session identifiers, and generates a fresh UUID
+   * so the next login can connect any Spotify account.
+   */
+  async logout() {
+    try {
+      await this.disconnectSpotify();
+    } catch (e) {
+      console.warn('Backend disconnect error:', e);
+    }
+    try {
+      localStorage.removeItem('tunefetch_user_id');
+      localStorage.removeItem('tf_spotify_active_job');
+      // Generate standard RFC4122 v4 UUID
+      const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+      localStorage.setItem('tunefetch_user_id', newId);
+    } catch {}
+    return true;
+  },
+
+  /**
    * Retrieves all playlists for the authenticated Spotify user
    */
   async getSpotifyPlaylists() {

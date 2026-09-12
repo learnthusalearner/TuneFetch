@@ -40,6 +40,24 @@ class LocalBatchDownloader:
         target_folder = user_downloads_root / safe_folder
         os.makedirs(target_folder, exist_ok=True)
 
+        initial_tracks = []
+        for i, trk in enumerate(tracks):
+            s_name = trk.get("song_name") or trk.get("title") or trk.get("name") or f"Track {i+1}"
+            a_name = trk.get("artist_name") or trk.get("artist") or ""
+            if isinstance(a_name, list):
+                a_name = ", ".join(a_name)
+            initial_tracks.append({
+                "index": i + 1,
+                "title": s_name,
+                "artist": a_name,
+                "status": "QUEUED",
+                "progress": 0.0,
+                "speed": "--",
+                "eta": "--",
+                "filename": None,
+                "error": None,
+            })
+
         with _local_batches_lock:
             _local_batches[batch_id] = {
                 "batch_id": batch_id,
@@ -51,12 +69,17 @@ class LocalBatchDownloader:
                 "completed_tracks": 0,
                 "failed_tracks": 0,
                 "current_track_title": "",
+                "current_track_progress": 0.0,
+                "current_track_speed": "0 KB/s",
+                "current_track_eta": "--",
+                "overall_progress": 0.0,
                 "current_index": 0,
                 "created_at": time.time(),
                 "start_time": time.time(),
                 "elapsed_seconds": 0,
-                "estimated_remaining_seconds": len(tracks) * 12,
-                "tracks_progress": [],
+                "estimated_remaining_seconds": max(10, len(tracks) * 10),
+                "seconds_per_track": 10.0,
+                "tracks_progress": initial_tracks,
                 "error": None,
             }
 
@@ -83,6 +106,8 @@ class LocalBatchDownloader:
             if batch_id in _local_batches:
                 _local_batches[batch_id]["status"] = "DOWNLOADING"
 
+        total_cnt = max(1, len(tracks))
+
         for idx, trk in enumerate(tracks):
             song_name = trk.get("song_name") or trk.get("title") or trk.get("name") or f"Track {idx+1}"
             artist_name = trk.get("artist_name") or trk.get("artist") or ""
@@ -95,18 +120,14 @@ class LocalBatchDownloader:
                 if batch_id in _local_batches:
                     _local_batches[batch_id]["current_track_title"] = f"{artist_name} - {song_name}" if artist_name else song_name
                     _local_batches[batch_id]["current_index"] = idx + 1
-
-            track_entry = {
-                "index": idx + 1,
-                "title": song_name,
-                "artist": artist_name,
-                "status": "DOWNLOADING",
-                "filename": None,
-                "error": None,
-            }
+                    _local_batches[batch_id]["current_track_progress"] = 0.0
+                    _local_batches[batch_id]["current_track_speed"] = "0 KB/s"
+                    _local_batches[batch_id]["current_track_eta"] = "--"
+                    if idx < len(_local_batches[batch_id]["tracks_progress"]):
+                        _local_batches[batch_id]["tracks_progress"][idx]["status"] = "DOWNLOADING"
 
             try:
-                # Create and wait for single task download
+                # Create single task download
                 task_id = DownloadManager.create_download_task(
                     url=query_or_url,
                     format_type=format_type,
@@ -116,7 +137,7 @@ class LocalBatchDownloader:
                     is_single_download=False,
                 )
 
-                # Poll until this task finishes
+                # Poll until this task finishes, streaming live progress & speed
                 max_wait_seconds = 180
                 start_wait = time.time()
                 finished = False
@@ -126,59 +147,88 @@ class LocalBatchDownloader:
                         t_status = t_data.get("status")
                         t_filepath = t_data.get("filepath")
                         t_error = t_data.get("error")
+                        t_progress = float(t_data.get("progress", 0.0) or 0.0)
+                        t_speed = str(t_data.get("speed", "0 KB/s"))
+                        t_eta = str(t_data.get("eta", "--"))
+
+                    # Update live batch metrics
+                    with _local_batches_lock:
+                        if batch_id in _local_batches:
+                            b = _local_batches[batch_id]
+                            b["current_track_progress"] = t_progress
+                            b["current_track_speed"] = t_speed
+                            b["current_track_eta"] = t_eta
+                            comp = b["completed_tracks"]
+                            b["overall_progress"] = min(100.0, round(((comp + (t_progress / 100.0)) / total_cnt) * 100, 1))
+                            if idx < len(b["tracks_progress"]):
+                                b["tracks_progress"][idx]["progress"] = t_progress
+                                b["tracks_progress"][idx]["speed"] = t_speed
+                                b["tracks_progress"][idx]["eta"] = t_eta
 
                     if t_status == "completed" and t_filepath and os.path.exists(t_filepath):
-                        # Copy or move the completed file into user's playlist target folder
+                        # Copy completed file into user's playlist target folder
                         safe_song = sanitize_filename(song_name, ".mp3")
                         safe_art = sanitize_filename(artist_name, "")
                         final_filename = f"{safe_art} - {safe_song}" if safe_art else safe_song
                         if not final_filename.lower().endswith(".mp3"):
                             final_filename = f"{final_filename}.mp3"
-                            
+
                         dest_file = target_folder / final_filename
                         shutil.copy2(t_filepath, str(dest_file))
 
-                        track_entry["status"] = "COMPLETED"
-                        track_entry["filename"] = final_filename
                         with _local_batches_lock:
                             if batch_id in _local_batches:
-                                _local_batches[batch_id]["completed_tracks"] += 1
-                        finished = True
-                        break
-                    elif t_status == "error":
-                        track_entry["status"] = "ERROR"
-                        track_entry["error"] = t_error or "Download failed"
-                        with _local_batches_lock:
-                            if batch_id in _local_batches:
-                                _local_batches[batch_id]["failed_tracks"] += 1
+                                b = _local_batches[batch_id]
+                                b["completed_tracks"] += 1
+                                b["current_track_progress"] = 100.0
+                                comp = b["completed_tracks"]
+                                b["overall_progress"] = min(100.0, round((comp / total_cnt) * 100, 1))
+                                if idx < len(b["tracks_progress"]):
+                                    b["tracks_progress"][idx]["status"] = "COMPLETED"
+                                    b["tracks_progress"][idx]["progress"] = 100.0
+                                    b["tracks_progress"][idx]["filename"] = final_filename
                         finished = True
                         break
 
-                    time.sleep(0.5)
+                    elif t_status == "error":
+                        with _local_batches_lock:
+                            if batch_id in _local_batches:
+                                b = _local_batches[batch_id]
+                                b["failed_tracks"] += 1
+                                if idx < len(b["tracks_progress"]):
+                                    b["tracks_progress"][idx]["status"] = "ERROR"
+                                    b["tracks_progress"][idx]["error"] = t_error or "Download failed"
+                        finished = True
+                        break
+
+                    time.sleep(0.4)
 
                 if not finished:
-                    track_entry["status"] = "TIMEOUT"
-                    track_entry["error"] = "Track download timed out after 3 minutes"
                     with _local_batches_lock:
                         if batch_id in _local_batches:
-                            _local_batches[batch_id]["failed_tracks"] += 1
+                            b = _local_batches[batch_id]
+                            b["failed_tracks"] += 1
+                            if idx < len(b["tracks_progress"]):
+                                b["tracks_progress"][idx]["status"] = "TIMEOUT"
+                                b["tracks_progress"][idx]["error"] = "Track download timed out after 3 minutes"
 
             except Exception as trk_err:
                 logger.error(f"Error downloading track '{song_name}': {trk_err}")
-                track_entry["status"] = "ERROR"
-                track_entry["error"] = str(trk_err)
                 with _local_batches_lock:
                     if batch_id in _local_batches:
-                        _local_batches[batch_id]["failed_tracks"] += 1
-
-            with _local_batches_lock:
-                if batch_id in _local_batches:
-                    _local_batches[batch_id]["tracks_progress"].append(track_entry)
+                        b = _local_batches[batch_id]
+                        b["failed_tracks"] += 1
+                        if idx < len(b["tracks_progress"]):
+                            b["tracks_progress"][idx]["status"] = "ERROR"
+                            b["tracks_progress"][idx]["error"] = str(trk_err)
 
         with _local_batches_lock:
             if batch_id in _local_batches:
                 _local_batches[batch_id]["status"] = "COMPLETED"
                 _local_batches[batch_id]["current_track_title"] = "All downloads finished!"
+                _local_batches[batch_id]["overall_progress"] = 100.0
+                _local_batches[batch_id]["current_track_progress"] = 100.0
+                _local_batches[batch_id]["estimated_remaining_seconds"] = 0
         logger.info(f"Local batch '{batch_id}' finished into '{target_folder}'.")
 
     @classmethod
@@ -188,22 +238,31 @@ class LocalBatchDownloader:
             if not batch:
                 return None
             data = dict(batch)
+            data["tracks_progress"] = [dict(t) for t in batch.get("tracks_progress", [])]
+            
             if data.get("start_time"):
                 if data.get("status") == "DOWNLOADING":
-                    elapsed = max(0, time.time() - data["start_time"])
+                    elapsed = max(0.0, time.time() - data["start_time"])
                     data["elapsed_seconds"] = round(elapsed, 1)
                     completed = data.get("completed_tracks", 0)
-                    total = data.get("total_tracks", 0)
-                    remaining = max(0, total - completed)
-                    if completed > 0:
-                        avg_per_track = elapsed / completed
-                        data["estimated_remaining_seconds"] = round(avg_per_track * remaining)
+                    total = max(1, data.get("total_tracks", 0))
+                    cur_prog = data.get("current_track_progress", 0.0)
+                    eff_completed = completed + (cur_prog / 100.0)
+                    eff_remaining = max(0.0, total - eff_completed)
+
+                    if eff_completed > 0.05:
+                        avg_per_track = elapsed / eff_completed
+                        data["estimated_remaining_seconds"] = max(0, round(avg_per_track * eff_remaining))
                         data["seconds_per_track"] = round(avg_per_track, 1)
                     else:
-                        data["estimated_remaining_seconds"] = remaining * 12
-                        data["seconds_per_track"] = 12.0
+                        data["estimated_remaining_seconds"] = max(0, round((total - completed) * 10))
+                        data["seconds_per_track"] = 10.0
+
+                    data["overall_progress"] = min(100.0, round((eff_completed / total) * 100, 1))
+
                 elif data.get("status") == "COMPLETED":
                     data["estimated_remaining_seconds"] = 0
+                    data["overall_progress"] = 100.0
                     if not data.get("elapsed_seconds"):
                         data["elapsed_seconds"] = round(time.time() - data["start_time"], 1)
             return data

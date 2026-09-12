@@ -47,10 +47,21 @@ export default function SpotifyConnect({ spotifyStatus, onConnect, onDisconnect,
           className="icon-btn"
           onClick={onDisconnect}
           disabled={isLoading}
-          style={{ fontSize: 12, padding: '7px 14px' }}
+          style={{
+            fontSize: 12,
+            padding: '7px 14px',
+            color: '#f87171',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            borderRadius: '8px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+          title="Log out or connect a different Spotify account"
         >
           <LogOut size={13} />
-          <span>Disconnect</span>
+          <span>Switch / Logout</span>
         </button>
       </motion.div>
     );
@@ -127,6 +138,9 @@ export default function SpotifyConnect({ spotifyStatus, onConnect, onDisconnect,
         <Music2 size={20} />
         Connect with Spotify
       </motion.button>
+      <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '-8px' }}>
+        Log into any Spotify Free or Premium account · Switch accounts anytime
+      </span>
     </motion.div>
   );
 }

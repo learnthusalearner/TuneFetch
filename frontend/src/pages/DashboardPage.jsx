@@ -282,12 +282,12 @@ export default function DashboardPage({ onGoHome }) {
 
   const handleSpotifyDisconnect = async () => {
     try {
-      await api.disconnectSpotify();
+      await api.logout();
       setSpotifyStatus({ connected: false, spotify_user: null });
       setSpotifyPlaylists([]);
       setExtractedTracks(null);
       setSelectedPlaylistForModal(null);
-      pushToast('Spotify account disconnected.');
+      pushToast('Logged out of Spotify. You can now connect a different account.');
     } catch (err) {
       setGeneralError(err.message || 'Failed to disconnect Spotify account.');
     }
@@ -386,6 +386,7 @@ export default function DashboardPage({ onGoHome }) {
           historyCount={history.length}
           spotifyUser={spotifyStatus.spotify_user}
           onGoHome={onGoHome}
+          onLogout={handleSpotifyDisconnect}
         />
 
         {/* History drawer */}
@@ -808,11 +809,21 @@ export default function DashboardPage({ onGoHome }) {
                       <button
                         className="icon-btn"
                         onClick={handleSpotifyDisconnect}
-                        style={{ fontSize: 12, padding: '6px 12px', color: 'var(--text-muted)' }}
-                        title="Disconnect Spotify"
+                        style={{
+                          fontSize: 12,
+                          padding: '6px 12px',
+                          color: '#f87171',
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                          borderRadius: '8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title="Log out or connect a different Spotify account"
                       >
                         <LogOut size={13} />
-                        <span>Disconnect</span>
+                        <span>Switch / Logout</span>
                       </button>
                     </div>
                   </div>
@@ -835,10 +846,8 @@ export default function DashboardPage({ onGoHome }) {
             tracks={extractedTracks}
             isOpen={Boolean(selectedPlaylistForModal)}
             onClose={() => { setSelectedPlaylistForModal(null); setExtractedTracks(null); }}
-            onStartDownload={handleStartBatchDownload}
             onDownloadSingleTrack={handleDownloadSingleTrack}
             isLoadingTracks={isLoadingTracks}
-            isStartingDownload={isStartingBatchDownload}
             downloadingTrackId={downloadingTrackId}
           />
         )}

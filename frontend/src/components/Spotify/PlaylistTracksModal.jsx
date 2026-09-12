@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X, Search, Music, Download, Clock, Disc3, Loader2, CheckSquare,
-  Square, FolderDown, Laptop, Copy, Check, ExternalLink, ShieldCheck, Sparkles
+  Square, Laptop, Copy, Check, ExternalLink, ShieldCheck, Sparkles
 } from 'lucide-react';
 import { AUDIO_FORMATS } from '../../constants';
 import { api } from '../../services/api';
@@ -11,10 +11,8 @@ export default function PlaylistTracksModal({
   tracks,
   isOpen,
   onClose,
-  onStartDownload,
   onDownloadSingleTrack,
   isLoadingTracks,
-  isStartingDownload,
   downloadingTrackId
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -328,38 +326,6 @@ export default function PlaylistTracksModal({
                 </>
               )}
             </button>
-
-            {/* Cloud Server ZIP Download Button */}
-            <button
-              onClick={handleBatchDownloadClick}
-              disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
-              style={{
-                padding: '9px 15px',
-                fontSize: '12px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer'
-              }}
-              title="Download packaged ZIP archive from cloud server"
-            >
-              {isStartingDownload ? (
-                <>
-                  <Loader2 size={14} className="spinner" />
-                  <span>Preparing ZIP...</span>
-                </>
-              ) : (
-                <>
-                  <FolderDown size={14} />
-                  <span>Cloud ZIP</span>
-                </>
-              )}
-            </button>
           </div>
         </div>
 
@@ -580,29 +546,6 @@ export default function PlaylistTracksModal({
                   </span>
                 </>
               )}
-            </button>
-
-            {/* Cloud Server ZIP Download Button */}
-            <button
-              onClick={handleBatchDownloadClick}
-              disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
-              style={{
-                padding: '11px 18px',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer'
-              }}
-              title="Download packaged ZIP from cloud server"
-            >
-              <FolderDown size={16} />
-              <span>Cloud ZIP</span>
             </button>
           </div>
         </div>

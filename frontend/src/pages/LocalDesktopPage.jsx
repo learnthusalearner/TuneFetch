@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Laptop, FolderOpen, ExternalLink, Download, CheckCircle2,
   Clock, Zap, Music, AlertCircle, ArrowRight, Loader2, Sparkles,
-  RefreshCw, Check, FileText
+  RefreshCw, Check, FileText, Activity, Layers, Radio
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -13,7 +13,6 @@ export default function LocalDesktopPage() {
   const [localBatchId, setLocalBatchId] = useState(null);
   const [batchProgress, setBatchProgress] = useState(null);
   const [generalError, setGeneralError] = useState(null);
-  const [folderNotice, setFolderNotice] = useState(null);
   const [toasts, setToasts] = useState([]);
 
   // Local live timer state
@@ -79,7 +78,7 @@ export default function LocalDesktopPage() {
     } catch {}
   }, [pushToast]);
 
-  // Batch progress polling
+  // Batch progress polling with high-frequency (500ms) for snappy real-time updates
   useEffect(() => {
     if (!localBatchId) return;
 
@@ -92,10 +91,10 @@ export default function LocalDesktopPage() {
 
         if (progress.status === 'COMPLETED') {
           clearInterval(interval);
-          pushToast(`🎉 All ${progress.completed_tracks} songs downloaded to "Thanks for downloading"!`, 'success');
+          pushToast(`🎉 All ${progress.completed_tracks} songs downloaded into "Downloads/Thanks for downloading"!`, 'success');
         }
       } catch {}
-    }, 1000);
+    }, 500);
 
     return () => {
       active = false;
@@ -171,29 +170,79 @@ export default function LocalDesktopPage() {
   const isCompleted = batchProgress?.status === 'COMPLETED';
   const total = batchProgress?.total_tracks || 0;
   const completed = batchProgress?.completed_tracks || 0;
-  const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-  const etaSec = batchProgress?.estimated_remaining_seconds ?? (total > 0 ? (total - completed) * 12 : 0);
+  const failed = batchProgress?.failed_tracks || 0;
+  
+  // Real-time progress values
+  const currentTrackProgress = Math.min(100, Math.max(0, Math.round(batchProgress?.current_track_progress || 0)));
+  const currentSpeed = batchProgress?.current_track_speed || '0 KB/s';
+  const currentEta = batchProgress?.current_track_eta || '--';
+  const overallPercent = batchProgress?.overall_progress !== undefined
+    ? Math.min(100, Math.max(0, Math.round(batchProgress.overall_progress)))
+    : (total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0);
+    
+  const etaSec = batchProgress?.estimated_remaining_seconds ?? (total > 0 ? Math.max(0, (total - completed) * 10) : 0);
+  const secondsPerTrack = batchProgress?.seconds_per_track || 10.0;
+
+  const handleResetForNextPlaylist = () => {
+    setLocalBatchId(null);
+    setBatchProgress(null);
+    setElapsedSeconds(0);
+  };
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#090d16',
+      background: '#080c14',
       color: '#fff',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
       overflowX: 'hidden'
     }}>
+      {/* Dynamic Keyframe Styles for Live Equalizer & Pulses */}
+      <style>{`
+        @keyframes liveEq {
+          0%, 100% { height: 4px; }
+          50% { height: 18px; }
+        }
+        .live-eq-bar {
+          width: 3px;
+          background: #1DB954;
+          border-radius: 2px;
+          animation: liveEq 0.75s ease-in-out infinite;
+        }
+        .live-eq-bar:nth-child(2) { animation-delay: 0.15s; }
+        .live-eq-bar:nth-child(3) { animation-delay: 0.3s; }
+        .live-eq-bar:nth-child(4) { animation-delay: 0.45s; }
+        .live-eq-bar:nth-child(5) { animation-delay: 0.6s; }
+
+        @keyframes subtlePulse {
+          0%, 100% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.03); }
+        }
+        .pulse-badge {
+          animation: subtlePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes neonGlow {
+          0%, 100% { box-shadow: 0 0 15px rgba(29, 185, 84, 0.25); }
+          50% { box-shadow: 0 0 35px rgba(29, 185, 84, 0.55); }
+        }
+        .card-active-glow {
+          animation: neonGlow 3s ease-in-out infinite;
+        }
+      `}</style>
+
       {/* Ambient background glow */}
       <div style={{
         position: 'fixed',
         top: '-15%',
         left: '20%',
-        width: '600px',
-        height: '600px',
+        width: '650px',
+        height: '650px',
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(29, 185, 84, 0.12) 0%, rgba(9, 13, 22, 0) 70%)',
+        background: 'radial-gradient(circle, rgba(29, 185, 84, 0.14) 0%, rgba(8, 12, 20, 0) 70%)',
         pointerEvents: 'none',
         zIndex: 0
       }} />
@@ -233,7 +282,7 @@ export default function LocalDesktopPage() {
         position: 'sticky',
         top: 0,
         zIndex: 50,
-        background: 'rgba(9, 13, 22, 0.85)',
+        background: 'rgba(8, 12, 20, 0.85)',
         backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
         padding: '14px 28px',
@@ -296,7 +345,7 @@ export default function LocalDesktopPage() {
       <main style={{
         flex: 1,
         width: '100%',
-        maxWidth: '920px',
+        maxWidth: '940px',
         margin: '0 auto',
         padding: '36px 20px',
         display: 'flex',
@@ -331,167 +380,290 @@ export default function LocalDesktopPage() {
           </div>
         )}
 
-        {/* ─── LIVE DOWNLOADING MONITOR & TIMER CARD ─────────────────── */}
-        <div style={{
-          borderRadius: '20px',
-          background: 'linear-gradient(135deg, rgba(20, 29, 47, 0.75) 0%, rgba(12, 17, 29, 0.85) 100%)',
-          border: '1px solid rgba(29, 185, 84, 0.25)',
-          padding: '32px 28px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 35px rgba(29, 185, 84, 0.1)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px'
-        }}>
-          {/* Top stats bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        {/* ─── LIVE DOWNLOADING MONITOR & METRICS CARD ───────────────── */}
+        <div
+          className={isDownloading ? 'card-active-glow' : ''}
+          style={{
+            borderRadius: '22px',
+            background: 'linear-gradient(135deg, rgba(18, 26, 43, 0.8) 0%, rgba(10, 15, 26, 0.9) 100%)',
+            border: isDownloading ? '1px solid rgba(29, 185, 84, 0.45)' : '1px solid rgba(255, 255, 255, 0.1)',
+            padding: '32px 28px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            transition: 'border 0.3s'
+          }}
+        >
+          {/* Top Title and Live Audio Status Bar */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.2px', fontWeight: 800, color: '#1DB954' }}>
-                {isDownloading ? '● DOWNLOADING PLAYLIST' : isCompleted ? '✓ DOWNLOAD COMPLETED' : 'READY TO DOWNLOAD'}
-              </span>
-              <h2 style={{ margin: '4px 0 0 0', fontSize: '24px', fontWeight: 800, color: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '11.5px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1.2px',
+                  fontWeight: 800,
+                  color: isDownloading ? '#1DB954' : isCompleted ? '#10b981' : '#94a3b8'
+                }}>
+                  {isDownloading ? '● DOWNLOADING PLAYLIST LIVE' : isCompleted ? '✓ ALL DOWNLOADS FINISHED' : 'READY TO DOWNLOAD'}
+                </span>
+                {isDownloading && (
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '16px', marginLeft: '4px' }}>
+                    <span className="live-eq-bar" />
+                    <span className="live-eq-bar" />
+                    <span className="live-eq-bar" />
+                    <span className="live-eq-bar" />
+                    <span className="live-eq-bar" />
+                  </div>
+                )}
+              </div>
+              <h2 style={{ margin: '6px 0 0 0', fontSize: '26px', fontWeight: 800, color: '#fff', letterSpacing: '-0.4px' }}>
                 {batchProgress?.playlist_name || 'Spotify Playlist Downloader'}
               </h2>
             </div>
 
-            {/* LIVE DIGITAL TIMER DISPLAY */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-              padding: '10px 20px',
-              borderRadius: '14px',
-              background: 'rgba(0, 0, 0, 0.45)',
-              border: '1px solid rgba(29, 185, 84, 0.35)'
-            }}>
-              <div>
-                <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted, #888)', fontWeight: 700 }}>
-                  ELAPSED TIME
-                </div>
-                <div style={{
-                  fontSize: '28px',
-                  fontWeight: 900,
-                  fontFamily: 'monospace',
-                  color: '#1DB954',
-                  letterSpacing: '1px'
-                }}>
-                  {formatTimer(elapsedSeconds)}
-                </div>
-              </div>
+            {/* Reset / Clear button when finished */}
+            {isCompleted && (
+              <button
+                onClick={handleResetForNextPlaylist}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#fff',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <RefreshCw size={13} />
+                <span>Download Another Playlist</span>
+              </button>
+            )}
+          </div>
 
-              {isDownloading && (
-                <div style={{ borderLeft: '1px solid rgba(255, 255, 255, 0.12)', paddingLeft: '16px' }}>
-                  <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted, #888)', fontWeight: 700 }}>
-                    ESTIMATED REMAINING
-                  </div>
-                  <div style={{
-                    fontSize: '20px',
-                    fontWeight: 700,
-                    fontFamily: 'monospace',
-                    color: '#60a5fa'
-                  }}>
-                    ~{formatTimer(etaSec)}
-                  </div>
-                </div>
-              )}
+          {/* ─── LIVE HUD METRICS GRID ───────────────────────────── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: '14px'
+          }}>
+            {/* 1. Elapsed Time */}
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.07)'
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={13} color="#1DB954" />
+                <span>ELAPSED TIME</span>
+              </div>
+              <div style={{
+                fontSize: '24px',
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                color: '#1DB954',
+                marginTop: '4px',
+                letterSpacing: '1px'
+              }}>
+                {formatTimer(elapsedSeconds)}
+              </div>
+            </div>
+
+            {/* 2. Estimated Time Remaining */}
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: isDownloading ? '1px solid rgba(96, 165, 250, 0.3)' : '1px solid rgba(255, 255, 255, 0.07)'
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Radio size={13} color="#60a5fa" />
+                <span>ESTIMATED REMAINING</span>
+              </div>
+              <div style={{
+                fontSize: '24px',
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                color: isDownloading ? '#60a5fa' : '#94a3b8',
+                marginTop: '4px',
+                letterSpacing: '1px'
+              }}>
+                {isDownloading ? `~${formatTimer(etaSec)}` : isCompleted ? '00:00' : '--:--'}
+              </div>
+            </div>
+
+            {/* 3. Live Download Speed */}
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: isDownloading ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(255, 255, 255, 0.07)'
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={13} color="#fbbf24" />
+                <span>DOWNLOAD SPEED</span>
+              </div>
+              <div style={{
+                fontSize: '22px',
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                color: isDownloading ? '#fbbf24' : '#94a3b8',
+                marginTop: '4px'
+              }}>
+                {isDownloading ? currentSpeed : isCompleted ? 'Complete' : '0 KB/s'}
+              </div>
+            </div>
+
+            {/* 4. Songs Counter */}
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '14px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.07)'
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Layers size={13} color="#a855f7" />
+                <span>SONGS COMPLETED</span>
+              </div>
+              <div style={{
+                fontSize: '22px',
+                fontWeight: 800,
+                color: '#fff',
+                marginTop: '4px'
+              }}>
+                {completed} <span style={{ fontSize: '15px', color: '#94a3b8', fontWeight: 600 }}>/ {total}</span>
+              </div>
             </div>
           </div>
 
-          {/* Progress Bar */}
+          {/* ─── MASTER PROGRESS BAR ───────────────────────────── */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
-              <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+              <span style={{ color: 'rgba(255, 255, 255, 0.75)', fontWeight: 600 }}>
                 {isDownloading
-                  ? `Downloading track ${batchProgress?.current_index || completed + 1} of ${total}`
+                  ? `Overall Playlist Progress (${completed} of ${total} tracks)`
                   : isCompleted
-                  ? `Completed ${completed} of ${total} tracks`
-                  : 'Awaiting playlist or session code...'}
+                  ? `All ${completed} of ${total} tracks downloaded`
+                  : 'Awaiting playlist session code...'}
               </span>
-              <span style={{ fontWeight: 800, color: '#1DB954', fontSize: '14px' }}>
-                {percent}%
+              <span style={{ fontWeight: 800, color: '#1DB954', fontSize: '15px' }}>
+                {overallPercent}%
               </span>
             </div>
 
             <div style={{
               width: '100%',
-              height: '10px',
-              borderRadius: '5px',
+              height: '12px',
+              borderRadius: '6px',
               background: 'rgba(255, 255, 255, 0.08)',
               overflow: 'hidden',
               position: 'relative'
             }}>
               <div style={{
-                width: `${percent}%`,
+                width: `${overallPercent}%`,
                 height: '100%',
                 background: 'linear-gradient(90deg, #1DB954 0%, #10b981 100%)',
-                boxShadow: '0 0 16px rgba(29, 185, 84, 0.6)',
-                transition: 'width 0.4s ease'
+                boxShadow: '0 0 18px rgba(29, 185, 84, 0.7)',
+                transition: 'width 0.3s ease'
               }} />
             </div>
           </div>
 
-          {/* Current track indicator */}
+          {/* ─── CURRENT ACTIVE TRACK CARD WITH LIVE SPEED & TRACK BUFFER BAR ──── */}
           {isDownloading && (
             <div style={{
-              padding: '16px 20px',
-              borderRadius: '12px',
-              background: 'rgba(29, 185, 84, 0.08)',
-              border: '1px solid rgba(29, 185, 84, 0.25)',
+              padding: '18px 22px',
+              borderRadius: '14px',
+              background: 'rgba(29, 185, 84, 0.09)',
+              border: '1px solid rgba(29, 185, 84, 0.35)',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
               gap: '14px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '10px',
-                  background: 'rgba(29, 185, 84, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#1DB954'
-                }}>
-                  <Loader2 size={22} className="spinner" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'rgba(29, 185, 84, 0.22)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#1DB954',
+                    flexShrink: 0
+                  }}>
+                    <Loader2 size={22} className="spinner" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#1DB954', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Activity size={12} />
+                      <span>DOWNLOADING TRACK {batchProgress?.current_index || completed + 1} OF {total}</span>
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginTop: '2px' }}>
+                      {batchProgress?.current_track_title || 'Connecting high-speed audio stream...'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#1DB954', fontWeight: 800 }}>
-                    CURRENTLY DOWNLOADING ONE BY ONE
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginTop: '2px' }}>
-                    {batchProgress?.current_track_title || 'Preparing high-speed audio stream...'}
-                  </div>
+
+                <div style={{ fontSize: '12px', color: '#cbd5e1', textAlign: 'right' }}>
+                  <div>Live Speed: <strong style={{ color: '#fbbf24' }}>{currentSpeed}</strong></div>
+                  <div>Track ETA: <strong style={{ color: '#60a5fa' }}>{currentEta}</strong></div>
                 </div>
               </div>
 
-              <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', textAlign: 'right' }}>
-                <div>Format: <strong>320 kbps MP3</strong></div>
-                <div>Folder: <strong>Thanks for downloading</strong></div>
+              {/* Mini track progress indicator */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#94a3b8', marginBottom: '5px' }}>
+                  <span>Buffering high-fidelity 320 kbps MP3 stream</span>
+                  <span style={{ fontWeight: 700, color: '#1DB954' }}>{currentTrackProgress}%</span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${currentTrackProgress}%`,
+                    height: '100%',
+                    background: '#1DB954',
+                    transition: 'width 0.25s linear'
+                  }} />
+                </div>
               </div>
             </div>
           )}
 
-          {/* Success card on complete */}
+          {/* ─── SUCCESS CELEBRATION CARD ──────────────────────────── */}
           {isCompleted && (
             <div style={{
-              padding: '18px 22px',
-              borderRadius: '12px',
+              padding: '20px 24px',
+              borderRadius: '14px',
               background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.35)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '16px',
               flexWrap: 'wrap'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <CheckCircle2 size={28} color="#10b981" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <CheckCircle2 size={32} color="#10b981" />
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#fff' }}>
-                    All {completed} Songs Downloaded Successfully!
+                  <h4 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#fff' }}>
+                    All {completed} Songs Saved Successfully!
                   </h4>
-                  <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'rgba(255, 255, 255, 0.7)' }}>
-                    Saved in <code>Downloads/Thanks for downloading</code> in {formatTimer(elapsedSeconds)}
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.75)' }}>
+                    Saved into <code>Downloads/Thanks for downloading</code> in {formatTimer(elapsedSeconds)} (~{secondsPerTrack}s per song).
                   </p>
                 </div>
               </div>
@@ -502,72 +674,149 @@ export default function LocalDesktopPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '10px 18px',
+                  padding: '11px 20px',
                   borderRadius: '10px',
                   background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
                   color: '#000',
-                  fontSize: '13.5px',
+                  fontSize: '14px',
                   fontWeight: 700,
                   border: 'none',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(29, 185, 84, 0.35)'
                 }}
               >
-                <FolderOpen size={16} />
-                <span>Open Folder</span>
+                <FolderOpen size={17} />
+                <span>Open Destination Folder</span>
               </button>
             </div>
           )}
 
-          {/* List of downloaded songs in this batch */}
+          {/* ─── LIVE TRACKS QUEUE & STATUS FEED ─────────────────────── */}
           {batchProgress?.tracks_progress && batchProgress.tracks_progress.length > 0 && (
             <div>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: '13.5px', fontWeight: 700, color: 'rgba(255, 255, 255, 0.6)' }}>
-                Downloaded Tracks ({batchProgress.tracks_progress.length})
-              </h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'rgba(255, 255, 255, 0.8)' }}>
+                  Playlist Tracks Queue ({batchProgress.tracks_progress.length} Songs)
+                </h4>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  {completed} Completed · {batchProgress.tracks_progress.length - completed - failed} Remaining
+                </span>
+              </div>
+
               <div style={{
-                maxHeight: '220px',
+                maxHeight: '280px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px',
+                gap: '8px',
                 paddingRight: '6px'
               }}>
-                {batchProgress.tracks_progress.map((t, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid rgba(255, 255, 255, 0.06)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '12.5px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ color: 'rgba(255, 255, 255, 0.4)', width: '22px' }}>#{t.index}</span>
-                      <span style={{ fontWeight: 600, color: '#fff' }}>{t.title}</span>
-                      <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>• {t.artist}</span>
-                    </div>
-                    <div>
-                      {t.status === 'COMPLETED' ? (
-                        <span style={{ color: '#10b981', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Check size={14} /> Saved
+                {batchProgress.tracks_progress.map((t, i) => {
+                  const isCur = t.status === 'DOWNLOADING';
+                  const isDone = t.status === 'COMPLETED';
+                  const isErr = t.status === 'ERROR' || t.status === 'TIMEOUT';
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: isCur
+                          ? 'rgba(29, 185, 84, 0.12)'
+                          : isDone
+                          ? 'rgba(255, 255, 255, 0.04)'
+                          : 'rgba(255, 255, 255, 0.02)',
+                        border: isCur
+                          ? '1px solid rgba(29, 185, 84, 0.4)'
+                          : isDone
+                          ? '1px solid rgba(255, 255, 255, 0.07)'
+                          : '1px solid rgba(255, 255, 255, 0.04)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '13px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <span style={{
+                          color: isCur ? '#1DB954' : 'rgba(255, 255, 255, 0.4)',
+                          fontWeight: 700,
+                          width: '24px',
+                          fontSize: '12px'
+                        }}>
+                          #{t.index}
                         </span>
-                      ) : (
-                        <span style={{ color: '#f87171', fontWeight: 600 }}>Failed</span>
-                      )}
+                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontWeight: 600, color: '#fff' }}>{t.title}</span>
+                          {t.artist && (
+                            <span style={{ color: 'rgba(255, 255, 255, 0.55)', marginLeft: '6px' }}>
+                              • {t.artist}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ flexShrink: 0, marginLeft: '12px' }}>
+                        {isDone ? (
+                          <span style={{
+                            color: '#10b981',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            padding: '3px 8px',
+                            borderRadius: '6px'
+                          }}>
+                            <Check size={13} /> Saved
+                          </span>
+                        ) : isCur ? (
+                          <span style={{
+                            color: '#1DB954',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            background: 'rgba(29, 185, 84, 0.18)',
+                            padding: '3px 8px',
+                            borderRadius: '6px'
+                          }}>
+                            <Loader2 size={12} className="spinner" /> {t.progress ? `${Math.round(t.progress)}%` : 'Streaming...'}
+                          </span>
+                        ) : isErr ? (
+                          <span style={{
+                            color: '#f87171',
+                            fontWeight: 600,
+                            fontSize: '12px',
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            padding: '3px 8px',
+                            borderRadius: '6px'
+                          }}>
+                            Skipped
+                          </span>
+                        ) : (
+                          <span style={{
+                            color: 'rgba(255, 255, 255, 0.4)',
+                            fontSize: '11.5px',
+                            fontWeight: 600
+                          }}>
+                            Queued
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* ─── STANDBY / SELECTION TWO-STEP ACTION CARD ───────────────── */}
+        {/* ─── STANDBY / SELECTION TWO-STEP ACTION CARDS ───────────────── */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
@@ -586,13 +835,13 @@ export default function LocalDesktopPage() {
           }}>
             <div>
               <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, color: '#1DB954' }}>
-                METHOD 1 • BROWSE &amp; SELECT PLAYLIST
+                STEP 1 • SELECT PLAYLIST
               </span>
               <h3 style={{ margin: '8px 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#fff' }}>
-                Pick Playlist on Web App
+                Open Web Dashboard
               </h3>
               <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.6 }}>
-                Open our Cloud Web App to connect Spotify safely with OAuth. When you click <strong>"Download on My PC"</strong>, all songs are transferred here automatically!
+                Connect your Spotify account on our web app. When you click <strong>"Download on My PC"</strong>, all songs are routed directly here to download one-by-one into your Downloads folder!
               </p>
             </div>
 
@@ -633,13 +882,13 @@ export default function LocalDesktopPage() {
           }}>
             <div>
               <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, color: '#60a5fa' }}>
-                METHOD 2 • CODE OR JSON
+                STEP 2 • SESSION CODE
               </span>
               <h3 style={{ margin: '8px 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#fff' }}>
                 Enter Session Code
               </h3>
               <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.6 }}>
-                Have a 4-digit code (e.g. <code>TF-4982</code>) from the website or a raw songs JSON? Enter it below to start downloading immediately:
+                Have a 4-digit code (e.g. <code>TF-4982</code>) from the website or a songs JSON? Enter it below to start downloading immediately:
               </p>
             </div>
 
@@ -695,7 +944,7 @@ export default function LocalDesktopPage() {
         fontSize: '12px',
         color: 'rgba(255, 255, 255, 0.4)'
       }}>
-        TuneFetch Desktop Engine • Downloads saved directly into <code>Downloads/Thanks for downloading</code>
+        TuneFetch Desktop Engine • High-Fidelity MP3 Audio Downloader • Saved into <code>Downloads/Thanks for downloading</code>
       </footer>
     </div>
   );

@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Music, History, CheckCircle2, AlertCircle, Home } from 'lucide-react';
+import { Music, History, CheckCircle2, AlertCircle, Home, LogOut } from 'lucide-react';
 
 /**
  * Navbar — top bar used inside DashboardPage.
  * Shows brand logo, health status pill, optional Spotify user avatar, and history button.
  */
-export default function Navbar({ health, onToggleHistory, historyCount, spotifyUser, onGoHome }) {
+export default function Navbar({ health, onToggleHistory, historyCount, spotifyUser, onGoHome, onLogout }) {
   const isOnline   = health?.status === 'healthy';
   const hasFfmpeg  = health?.ffmpeg_available;
 
@@ -102,22 +102,52 @@ export default function Navbar({ health, onToggleHistory, historyCount, spotifyU
           )}
         </button>
 
-        {/* Spotify user avatar */}
+        {/* Spotify user avatar & Switch/Logout button */}
         {spotifyUser && (
-          <div
-            title={spotifyUser.display_name || 'Spotify User'}
-            style={{ cursor: 'default' }}
-          >
-            {spotifyUser.images?.[0]?.url ? (
-              <img
-                src={spotifyUser.images[0].url}
-                alt={spotifyUser.display_name}
-                className="user-avatar"
-              />
-            ) : (
-              <div className="user-avatar-placeholder">
-                {initials || '♪'}
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              title={`Logged in as ${spotifyUser.display_name || 'Spotify User'}`}
+              style={{ cursor: 'default', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {spotifyUser.images?.[0]?.url ? (
+                <img
+                  src={spotifyUser.images[0].url}
+                  alt={spotifyUser.display_name}
+                  className="user-avatar"
+                />
+              ) : (
+                <div className="user-avatar-placeholder">
+                  {initials || '♪'}
+                </div>
+              )}
+              {spotifyUser.display_name && (
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {spotifyUser.display_name}
+                </span>
+              )}
+            </div>
+
+            {onLogout && (
+              <button
+                className="icon-btn"
+                onClick={onLogout}
+                title="Log out or switch Spotify account"
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  color: '#f87171',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: '8px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <LogOut size={13} />
+                <span>Logout</span>
+              </button>
             )}
           </div>
         )}
