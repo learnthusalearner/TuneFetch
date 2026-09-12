@@ -141,36 +141,40 @@ def get_cookie_file() -> Optional[str]:
 
     return None
 
-def setup_global_network_handlers():
-    """
-    Configures standard urllib openers with cookie jar and proxies
-    to support pytubefix requests uniformly.
-    """
-    handlers = []
+def get_cookie_jar() -> Optional[http.cookiejar.MozillaCookieJar]:
+    """Loads Netscape cookies if available."""
     cookie_file = get_cookie_file()
     if cookie_file:
         try:
             cookie_jar = http.cookiejar.MozillaCookieJar(cookie_file)
             cookie_jar.load(ignore_discard=True, ignore_expires=True)
-            handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
-            logger.info(f"Loaded YouTube authentication cookies into urllib from {cookie_file}")
+            return cookie_jar
         except Exception as e:
-            logger.warning(f"Failed loading cookie file into urllib: {e}")
+            logger.warning(f"Failed loading cookie file: {e}")
+    return None
 
-    if ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
+def configure_urllib_network(use_proxy: bool = False):
+    """
+    Configures urllib opener dynamically.
+    Avoids permanently hijacking urllib when a proxy returns 407 authentication errors.
+    """
+    handlers = []
+    cookie_jar = get_cookie_jar()
+    if cookie_jar:
+        handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
+
+    if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
         proxy_dict = {
             "http": ROTATING_PROXY_URL.strip(),
             "https": ROTATING_PROXY_URL.strip()
         }
         handlers.append(urllib.request.ProxyHandler(proxy_dict))
-        logger.info("Configured rotating proxy in urllib handlers")
 
-    if handlers:
-        opener = urllib.request.build_opener(*handlers)
-        urllib.request.install_opener(opener)
+    opener = urllib.request.build_opener(*handlers)
+    urllib.request.install_opener(opener)
 
-# Apply global network configuration once at startup
-setup_global_network_handlers()
+# Initialize standard opener without forcing proxy globally
+configure_urllib_network(use_proxy=False)
 
 CLIENT_FALLBACK_ORDER = ["MWEB", "VISION_OS", "ANDROID", "WEB", "IOS", "TV"]
 
@@ -179,10 +183,10 @@ def build_pytubefix_instance(
     client: str = "MWEB",
     on_progress_callback=None,
     on_complete_callback=None,
-    use_proxy: bool = True
+    use_proxy: bool = False
 ) -> YouTube:
     """
-    Constructs a pytubefix YouTube object with optional proxy configuration.
+    Constructs a pytubefix YouTube object with dynamic proxy configuration.
     """
     proxy_dict = None
     if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
@@ -206,7 +210,7 @@ def fetch_youtube_with_fallback(
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
-    Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully.
+    Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully to direct.
     Leverages built-in botGuard PO token generation when available to bypass bot detection.
     Prioritizes stable non-SABR direct audio streams for reliable downloads.
     Returns (yt_instance, best_audio_stream).
@@ -219,6 +223,7 @@ def fetch_youtube_with_fallback(
     proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
 
     for use_proxy in proxy_attempts:
+        configure_urllib_network(use_proxy=use_proxy)
         for client_name in CLIENT_FALLBACK_ORDER:
             try:
                 yt = build_pytubefix_instance(
@@ -257,8 +262,13 @@ def fetch_youtube_with_fallback(
                     return yt, all_audio.first()
             except Exception as err:
                 last_err = err
-                logger.debug(f"Pytubefix client '{client_name}' (proxy={use_proxy}) failed for '{url}': {err}")
+                logger.warning(f"Pytubefix client '{client_name}' (proxy={use_proxy}) failed for '{url}': {err}")
+                if use_proxy and "407" in str(err):
+                    logger.warning("Proxy returned 407 Proxy Authentication Required. Skipping proxy and switching immediately to direct connection.")
+                    break
 
+    # Ensure opener is reset to clean direct state
+    configure_urllib_network(use_proxy=False)
     raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
 class DownloadManager:
