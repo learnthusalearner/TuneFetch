@@ -1,12 +1,17 @@
+import os
+import sys
 import logging
+from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.routes.health import router as health_router
 from app.routes.media import router as media_router
 from app.routes.spotify import router as spotify_router
-from app.core.config import APP_TITLE, APP_DESCRIPTION, APP_VERSION, CORS_ORIGINS
+from app.core.config import APP_TITLE, APP_DESCRIPTION, APP_VERSION, CORS_ORIGINS, BASE_DIR
 from app.core.database import init_db
 
 logging.basicConfig(
@@ -14,15 +19,43 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 
+def _find_frontend_dist() -> Optional[str]:
+    """
+    Locates the compiled React frontend static files across:
+    1. PyInstaller bundled temporary directory (sys._MEIPASS)
+    2. Local backend/frontend_dist
+    3. Sibling frontend/dist
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        for sub in ["frontend_dist", "dist"]:
+            p = os.path.join(sys._MEIPASS, sub)
+            if os.path.isdir(p) and os.path.isfile(os.path.join(p, "index.html")):
+                return p
+
+    candidates = [
+        os.path.join(BASE_DIR, "frontend_dist"),
+        os.path.join(BASE_DIR.parent, "frontend", "dist"),
+        os.path.join(os.getcwd(), "frontend_dist"),
+        os.path.join(os.getcwd(), "frontend", "dist"),
+    ]
+    for c in candidates:
+        if os.path.isdir(c) and os.path.isfile(os.path.join(c, "index.html")):
+            return c
+    return None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize Neon PostgreSQL tables
-    init_db()
+    # Initialize Neon PostgreSQL or local SQLite tables
+    try:
+        init_db()
+    except Exception as e:
+        logging.getLogger("main").warning(f"Database init warning: {e}")
     yield
 
 def create_app() -> FastAPI:
     """
-    Application factory for TuneFetch FastAPI backend with Spotify OAuth & PostgreSQL.
+    Application factory for TuneFetch FastAPI backend with Spotify OAuth,
+    audio stream extraction, and embedded React frontend serving.
     """
     app = FastAPI(
         title=APP_TITLE,
@@ -47,8 +80,23 @@ def create_app() -> FastAPI:
     app.include_router(media_router)
     app.include_router(spotify_router)
 
+    # Detect compiled frontend
+    dist_dir = _find_frontend_dist()
+    if dist_dir:
+        assets_dir = os.path.join(dist_dir, "assets")
+        if os.path.isdir(assets_dir):
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
     @app.api_route("/", methods=["GET", "HEAD"], tags=["Root"])
-    def root():
+    def root(request: Request):
+        accept = request.headers.get("accept", "")
+        # Real user web browser requesting HTML gets the SPA UI directly
+        if "text/html" in accept and dist_dir:
+            index_path = os.path.join(dist_dir, "index.html")
+            if os.path.isfile(index_path):
+                return FileResponse(index_path)
+
+        # Automated probes / API health checks receive JSON response
         return {
             "app": APP_TITLE,
             "version": APP_VERSION,
@@ -62,6 +110,25 @@ def create_app() -> FastAPI:
             "status": "healthy",
             "version": APP_VERSION
         }
+
+    # Catch-all route for Single Page Application (SPA) client-side routing (/dashboard, etc.)
+    if dist_dir:
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str):
+            # Never intercept API or Spotify routes
+            for prefix in ["api", "spotify", "health", "docs", "openapi.json"]:
+                if full_path == prefix or full_path.startswith(f"{prefix}/"):
+                    raise HTTPException(status_code=404, detail="Not Found")
+
+            target_file = os.path.join(dist_dir, full_path)
+            if full_path and os.path.isfile(target_file):
+                return FileResponse(target_file)
+
+            index_path = os.path.join(dist_dir, "index.html")
+            if os.path.isfile(index_path):
+                return FileResponse(index_path)
+
+            raise HTTPException(status_code=404, detail="Not Found")
 
     return app
 

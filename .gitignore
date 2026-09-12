@@ -25,6 +25,7 @@ backend/downloads/*
 # Frontend build & cache
 frontend/dist/
 frontend/dist-ssr/
+backend/frontend_dist/
 *.local
 # Environment & credentials
 .env
