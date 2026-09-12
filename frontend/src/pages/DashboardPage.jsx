@@ -226,7 +226,9 @@ export default function DashboardPage({ onGoHome }) {
     }
   };
 
-  const handleStartBatchDownload = async (playlistId, format, trackIds) => {
+  const [pendingAction, setPendingAction] = useState(null);
+
+  const executeStartBatchDownload = async (playlistId, format, trackIds) => {
     setIsStartingBatchDownload(true);
     setGeneralError(null);
     resetTask();
@@ -251,7 +253,16 @@ export default function DashboardPage({ onGoHome }) {
     }
   };
 
-  const handleDownloadSingleTrack = async (track, format, trackId) => {
+  const handleStartBatchDownload = async (playlistId, format, trackIds) => {
+    if (!cookieStatus.has_cookies) {
+      setPendingAction({ type: 'batch', playlistId, format, trackIds });
+      setShowCookieModal(true);
+      return;
+    }
+    await executeStartBatchDownload(playlistId, format, trackIds);
+  };
+
+  const executeDownloadSingleTrack = async (track, format, trackId) => {
     setDownloadingTrackId(trackId);
     setGeneralError(null);
     try {
@@ -274,6 +285,34 @@ export default function DashboardPage({ onGoHome }) {
     } finally {
       setDownloadingTrackId(null);
     }
+  };
+
+  const handleDownloadSingleTrack = async (track, format, trackId) => {
+    if (!cookieStatus.has_cookies) {
+      setPendingAction({ type: 'single', track, format, trackId });
+      setShowCookieModal(true);
+      return;
+    }
+    await executeDownloadSingleTrack(track, format, trackId);
+  };
+
+  const handleCloseCookieModal = () => {
+    setShowCookieModal(false);
+    if (pendingAction) {
+      const act = pendingAction;
+      setPendingAction(null);
+      if (act.type === 'batch') {
+        executeStartBatchDownload(act.playlistId, act.format, act.trackIds);
+      } else if (act.type === 'single') {
+        executeDownloadSingleTrack(act.track, act.format, act.trackId);
+      }
+    }
+  };
+
+  const handleCookieSuccess = (count) => {
+    setCookieStatus({ has_cookies: true, count });
+    pushToast(`Loaded ${count} verification cookies! They will be wiped after your download.`, 'success');
+    handleCloseCookieModal();
   };
 
   const handleDismissBatchJob = () => {
@@ -480,12 +519,9 @@ export default function DashboardPage({ onGoHome }) {
         {/* Ephemeral YouTube Cookie Verification Modal */}
         <CookieModal
           isOpen={showCookieModal}
-          onClose={() => setShowCookieModal(false)}
+          onClose={handleCloseCookieModal}
           existingCookieCount={cookieStatus.count}
-          onSuccess={(count) => {
-            setCookieStatus({ has_cookies: true, count });
-            pushToast(`Loaded ${count} verification cookies! They will be wiped after your download.`, 'success');
-          }}
+          onSuccess={handleCookieSuccess}
         />
 
         {/* Audio Player */}

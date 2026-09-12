@@ -298,39 +298,24 @@ def configure_urllib_network(use_proxy: bool = False, custom_cookies: Optional[h
 # Initialize standard opener without forcing proxy globally
 configure_urllib_network(use_proxy=False)
 
-CLIENT_FALLBACK_ORDER = ["MWEB", "VISION_OS", "ANDROID", "WEB", "IOS", "TV"]
+CLIENT_FALLBACK_ORDER = ["TV_SIMPLY", "WEB_SAFARI", "MWEB", "ANDROID_VR", "VISION_OS", "IOS", "WEB"]
 
 def build_pytubefix_instance(
     url: str,
-    client: str = "MWEB",
+    client: str = "TV_SIMPLY",
     on_progress_callback=None,
-    on_complete_callback=None,
-    use_proxy: bool = False,
-    po_token: Optional[str] = None
+    on_complete_callback=None
 ) -> YouTube:
     """
-    Constructs a pytubefix YouTube object with dynamic proxy and PO token verifier configuration.
+    Constructs a pytubefix YouTube object.
+    Urllib opener is dynamically configured with cookies and proxies in configure_urllib_network
+    to prevent install_proxy from stripping the HTTPCookieProcessor.
     """
-    proxy_dict = None
-    if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
-        proxy_dict = {
-            "http": ROTATING_PROXY_URL.strip(),
-            "https": ROTATING_PROXY_URL.strip()
-        }
-
-    verifier = None
-    if po_token:
-        def verifier():
-            return "", po_token
-
     return YouTube(
         url,
         client=client,
         on_progress_callback=on_progress_callback,
-        on_complete_callback=on_complete_callback,
-        proxies=proxy_dict,
-        use_po_token=bool(po_token),
-        po_token_verifier=verifier
+        on_complete_callback=on_complete_callback
     )
 
 def fetch_youtube_with_fallback(
@@ -341,15 +326,14 @@ def fetch_youtube_with_fallback(
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
+    Prioritizes TV_SIMPLY (zero bot detection, high stability, 128kbps AAC) followed by
+    WEB_SAFARI, MWEB, ANDROID_VR, VISION_OS, IOS, and WEB.
     Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully to direct.
-    Leverages built-in botGuard PO token generation when available to bypass bot detection.
-    Prioritizes stable non-SABR direct audio streams for reliable downloads.
     Accepts user session custom_cookies for temporary authenticated download execution.
     Returns (yt_instance, best_audio_stream).
     Raises RuntimeError if all clients fail.
     """
     last_err = None
-    po_token_cache = None
 
     # Try with proxy (if configured), then direct if proxy throws an auth/network failure
     proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
@@ -358,24 +342,11 @@ def fetch_youtube_with_fallback(
         configure_urllib_network(use_proxy=use_proxy, custom_cookies=custom_cookies)
         for client_name in CLIENT_FALLBACK_ORDER:
             try:
-                # Pre-generate PO token via botGuard for this video if needed
-                if po_token_cache is None:
-                    try:
-                        from pytubefix.botGuard.bot_guard import generate_po_token
-                        from pytubefix import extract
-                        vid_id = extract.video_id(url)
-                        po_token_cache = generate_po_token(vid_id) or ""
-                    except Exception as pot_err:
-                        logger.debug(f"Auto PO token generation skipped: {pot_err}")
-                        po_token_cache = ""
-
                 yt = build_pytubefix_instance(
                     url=url,
                     client=client_name,
                     on_progress_callback=on_progress_callback,
-                    on_complete_callback=on_complete_callback,
-                    use_proxy=use_proxy,
-                    po_token=po_token_cache if po_token_cache else None
+                    on_complete_callback=on_complete_callback
                 )
 
                 # Accessing title forces basic metadata extraction
@@ -704,6 +675,9 @@ class DownloadManager:
                     active_cookies = UserCookieStore.get_cookies(user_id)
                 except Exception:
                     pass
+
+            if not active_cookies:
+                active_cookies = get_cookie_jar()
 
             # 1. Fetch YouTube instance with client fallback
             yt, audio_stream = fetch_youtube_with_fallback(
