@@ -1,12 +1,12 @@
 """
 TuneFetch Windows Setup Wizard
-Professional desktop installer UI.
+Clean, modern desktop installer with persistent navigation controls.
 
 Flow:
-1. Welcome
-2. License & Privacy
-3. Installation
-4. Complete
+1. Welcome & Installation Directory
+2. License & Privacy Policy (Must accept to install)
+3. Installation (Unpacks CLI engine & configures PATH)
+4. Finish & Terminal Usage
 """
 
 import os
@@ -26,6 +26,7 @@ DEFAULT_INSTALL_DIR = os.path.join(
     "TuneFetch"
 )
 
+# Visual Theme Tokens (Harmonized with TuneFetch Dark Palette)
 BG = "#121317"
 SURFACE = "#1a1b20"
 SURFACE_2 = "#22242c"
@@ -34,78 +35,25 @@ TEXT = "#ffffff"
 MUTED = "#9a9da8"
 GREEN = "#1DB954"
 GREEN_HOVER = "#1ed760"
-DANGER = "#ef4444"
+DISABLED_BG = "#1e2027"
+DISABLED_FG = "#555866"
 
 
-LICENSE_AND_PRIVACY = """
-TUNEFETCH LICENSE & PRIVACY NOTICE
-Version 1.3.0
+LICENSE_AND_PRIVACY = """TUNEFETCH LICENSE & PRIVACY NOTICE
+Version 1.3.0 — Open Source Audio Extraction Software
 
-OPEN SOURCE SOFTWARE
+1. MIT OPEN SOURCE LICENSE
+TuneFetch is free, open-source software released under the MIT License. You are free to inspect, audit, modify, and redistribute the software in accordance with the license.
 
-TuneFetch is free and open-source software released under the MIT License.
-The source code can be inspected, audited, modified, and redistributed
-according to the terms of the MIT License.
+2. PRIVACY & SECURITY
+• Zero Credential Logging: TuneFetch uses Spotify PKCE OAuth 2.0. We NEVER ask for, handle, or store your Spotify password.
+• Local Processing: Audio extraction and MP3 encoding are processed entirely on your local machine. No audio files are uploaded to our servers.
+• Temporary Cloud Sessions: To synchronize playlist requests from the web dashboard to your terminal, temporary session identifiers and track metadata are stored in our hosted PostgreSQL database and automatically purged after expiration.
 
-Spotify Authentication
+3. ACCEPTABLE USE & USER RESPONSIBILITY
+TuneFetch is designed for personal backup and educational purposes. You are responsible for ensuring that your use of the application complies with applicable copyright laws, local regulations, and the terms of third-party services.
 
-TuneFetch uses Spotify's OAuth authorization system to connect your Spotify
-account and access playlists that you authorize.
-
-TuneFetch does not ask for or store your Spotify password.
-
-Temporary Session Data
-
-To synchronize the TuneFetch website with the desktop application, the service
-may temporarily process information such as:
-
-• Session identifiers
-• Playlist names
-• Track names and artist names
-• Track counts
-• Information required to process a download session
-• Resolved media-source information used during processing
-
-Temporary session information is retained only for the period necessary for
-the service to operate and is automatically cleaned according to the
-application's configured retention policy.
-
-Database & Infrastructure
-
-TuneFetch uses PostgreSQL infrastructure provided by Neon for application
-data and temporary session coordination.
-
-Caching may be used to reduce repeated requests and improve application
-performance.
-
-Third-Party Services
-
-TuneFetch may interact with third-party services such as Spotify and other
-services required by the application's processing pipeline. These services
-operate under their own terms and privacy policies.
-
-Local Processing
-
-The TuneFetch desktop application performs download processing locally on
-your computer.
-
-Downloaded files are saved to your local Downloads folder and are not
-intentionally uploaded to TuneFetch servers.
-
-Security
-
-TuneFetch takes reasonable technical measures to protect information used by
-the application. However, no internet-connected service can guarantee
-absolute security.
-
-User Responsibility
-
-You are responsible for ensuring that your use of TuneFetch complies with
-applicable laws, copyright requirements, and the terms of the services you
-use.
-
-By continuing with installation, you acknowledge that you have read and
-understood this License & Privacy Notice.
+By checking the acceptance box below, you acknowledge and agree to these terms.
 """
 
 
@@ -114,73 +62,30 @@ class TuneFetchInstaller(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title(f"{APP_NAME} Setup")
-        self.geometry("760x560")
-        self.resizable(False, False)
+        self.title(f"{APP_NAME} Setup Wizard")
+        self.geometry("720x520")
+        self.minsize(680, 480)
+        self.resizable(True, True)
         self.configure(bg=BG)
 
         self.accepted_terms = tk.BooleanVar(value=False)
-        self.install_dir_var = tk.StringVar(
-            value=DEFAULT_INSTALL_DIR
-        )
-
+        self.install_dir_var = tk.StringVar(value=DEFAULT_INSTALL_DIR)
         self.current_step = 1
 
         self.setup_styles()
         self.build_shell()
         self.show_welcome()
 
-    # ============================================================
-    # STYLING
-    # ============================================================
-
     def setup_styles(self):
-
         self.style = ttk.Style(self)
-
         try:
             self.style.theme_use("clam")
         except Exception:
             pass
 
-        self.style.configure(
-            "TFrame",
-            background=BG
-        )
-
-        self.style.configure(
-            "TLabel",
-            background=BG,
-            foreground=TEXT,
-            font=("Segoe UI", 10)
-        )
-
-        self.style.configure(
-            "Title.TLabel",
-            background=BG,
-            foreground=TEXT,
-            font=("Segoe UI", 25, "bold")
-        )
-
-        self.style.configure(
-            "Subtitle.TLabel",
-            background=BG,
-            foreground=MUTED,
-            font=("Segoe UI", 10)
-        )
-
-        self.style.configure(
-            "Section.TLabel",
-            background=BG,
-            foreground=GREEN,
-            font=("Segoe UI", 11, "bold")
-        )
-
-        self.style.configure(
-            "Card.TFrame",
-            background=SURFACE
-        )
-
+        self.style.configure("TFrame", background=BG)
+        self.style.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
+        self.style.configure("Card.TFrame", background=SURFACE)
         self.style.configure(
             "TProgressbar",
             troughcolor=SURFACE_2,
@@ -190,484 +95,291 @@ class TuneFetchInstaller(tk.Tk):
             darkcolor=GREEN
         )
 
-    # ============================================================
-    # MAIN SHELL
-    # ============================================================
-
     def build_shell(self):
+        """Build the master frame with top header, middle content container, and pinned bottom footer."""
+        # Main shell container
+        self.main_frame = tk.Frame(self, bg=BG)
+        self.main_frame.pack(fill="both", expand=True)
 
-        self.main = tk.Frame(
-            self,
-            bg=BG
-        )
+        # 1. Header (Fixed at top)
+        self.header_frame = tk.Frame(self.main_frame, bg=BG)
+        self.header_frame.pack(side="top", fill="x", padx=32, pady=(20, 10))
 
-        self.main.pack(
-            fill="both",
-            expand=True
-        )
+        brand_row = tk.Frame(self.header_frame, bg=BG)
+        brand_row.pack(fill="x")
 
-        # Header
-        self.header = tk.Frame(
-            self.main,
-            bg=BG
-        )
-
-        self.header.pack(
-            fill="x",
-            padx=34,
-            pady=(28, 0)
-        )
-
-        brand = tk.Label(
-            self.header,
+        tk.Label(
+            brand_row,
             text="♪  TuneFetch",
             bg=BG,
             fg=GREEN,
             font=("Segoe UI", 15, "bold")
-        )
+        ).pack(side="left")
 
-        brand.pack(side="left")
-
-        version = tk.Label(
-            self.header,
-            text=f"v{APP_VERSION}",
+        tk.Label(
+            brand_row,
+            text=f"Setup Wizard v{APP_VERSION}",
             bg=BG,
             fg=MUTED,
             font=("Segoe UI", 9)
+        ).pack(side="right")
+
+        # Step Indicator Pills
+        self.steps_bar = tk.Frame(self.header_frame, bg=BG)
+        self.steps_bar.pack(fill="x", pady=(14, 4))
+
+        self.step_indicators = []
+        step_names = [("1", "Welcome"), ("2", "License"), ("3", "Install"), ("4", "Finish")]
+        for num, name in step_names:
+            pill = tk.Frame(self.steps_bar, bg=BG)
+            pill.pack(side="left", expand=True, fill="x")
+
+            lbl_num = tk.Label(
+                pill, text=num, width=3, bg=SURFACE_2, fg=MUTED, font=("Segoe UI", 8, "bold")
+            )
+            lbl_num.pack(side="left")
+
+            lbl_txt = tk.Label(
+                pill, text=f" {name}", bg=BG, fg=MUTED, font=("Segoe UI", 9)
+            )
+            lbl_txt.pack(side="left")
+
+            self.step_indicators.append((lbl_num, lbl_txt))
+
+        # Thin separator below header
+        tk.Frame(self.header_frame, bg=BORDER, height=1).pack(fill="x", pady=(12, 0))
+
+        # 2. Footer Navigation Bar (FIXED PINNED AT BOTTOM - NEVER CLIPPED)
+        self.footer_frame = tk.Frame(self.main_frame, bg=BG)
+        self.footer_frame.pack(side="bottom", fill="x", padx=32, pady=(10, 20))
+
+        tk.Frame(self.footer_frame, bg=BORDER, height=1).pack(fill="x", pady=(0, 14))
+
+        self.footer_buttons = tk.Frame(self.footer_frame, bg=BG)
+        self.footer_buttons.pack(fill="x")
+
+        # Left button (Cancel)
+        self.btn_cancel = tk.Button(
+            self.footer_buttons,
+            text="Cancel",
+            command=self.destroy,
+            bg=SURFACE_2,
+            fg=TEXT,
+            activebackground=BORDER,
+            activeforeground=TEXT,
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+            bd=0,
+            padx=18,
+            pady=8,
+            cursor="hand2"
+        )
+        self.btn_cancel.pack(side="left")
+
+        # Right buttons container
+        self.right_buttons = tk.Frame(self.footer_buttons, bg=BG)
+        self.right_buttons.pack(side="right")
+
+        self.btn_back = tk.Button(
+            self.right_buttons,
+            text="← Back",
+            command=self.go_back,
+            bg=SURFACE_2,
+            fg=TEXT,
+            activebackground=BORDER,
+            activeforeground=TEXT,
+            font=("Segoe UI", 9),
+            relief="flat",
+            bd=0,
+            padx=18,
+            pady=8,
+            cursor="hand2"
         )
 
-        version.pack(side="right")
-
-        # Step indicator
-        self.steps_frame = tk.Frame(
-            self.main,
-            bg=BG
+        self.btn_next = tk.Button(
+            self.right_buttons,
+            text="Continue →",
+            command=self.go_next,
+            bg=GREEN,
+            fg="#000000",
+            activebackground=GREEN_HOVER,
+            activeforeground="#000000",
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+            bd=0,
+            padx=22,
+            pady=8,
+            cursor="hand2"
         )
 
-        self.steps_frame.pack(
-            fill="x",
-            padx=34,
-            pady=(26, 0)
-        )
+        # 3. Middle Dynamic Content Container
+        self.content_frame = tk.Frame(self.main_frame, bg=BG)
+        self.content_frame.pack(side="top", fill="both", expand=True, padx=32, pady=10)
 
-        self.step_widgets = []
-
-        steps = [
-            ("1", "Welcome"),
-            ("2", "Privacy"),
-            ("3", "Install"),
-            ("4", "Complete")
-        ]
-
-        for index, (number, name) in enumerate(steps):
-
-            wrapper = tk.Frame(
-                self.steps_frame,
-                bg=BG
-            )
-
-            wrapper.pack(
-                side="left",
-                expand=True,
-                fill="x"
-            )
-
-            circle = tk.Label(
-                wrapper,
-                text=number,
-                width=3,
-                height=1,
-                bg=SURFACE_2,
-                fg=MUTED,
-                font=("Segoe UI", 9, "bold")
-            )
-
-            circle.pack()
-
-            label = tk.Label(
-                wrapper,
-                text=name,
-                bg=BG,
-                fg=MUTED,
-                font=("Segoe UI", 8)
-            )
-
-            label.pack(pady=(5, 0))
-
-            self.step_widgets.append(
-                (circle, label)
-            )
-
-        # Content
-        self.container = tk.Frame(
-            self.main,
-            bg=BG
-        )
-
-        self.container.pack(
-            fill="both",
-            expand=True,
-            padx=34,
-            pady=28
-        )
-
-    # ============================================================
-    # COMMON UI
-    # ============================================================
-
-    def update_steps(self, active):
-
-        for index, (circle, label) in enumerate(
-            self.step_widgets,
-            start=1
-        ):
-
-            if index < active:
-                circle.configure(
-                    bg=GREEN,
-                    fg="#000000",
-                    text="✓"
-                )
-
-                label.configure(
-                    fg=GREEN
-                )
-
-            elif index == active:
-                circle.configure(
-                    bg=GREEN,
-                    fg="#000000",
-                    text=str(index)
-                )
-
-                label.configure(
-                    fg=TEXT
-                )
-
+    def update_steps(self, active_index):
+        """Update step numbers and highlights."""
+        for idx, (lbl_num, lbl_txt) in enumerate(self.step_indicators, start=1):
+            if idx < active_index:
+                lbl_num.configure(bg=GREEN, fg="#000000", text="✓")
+                lbl_txt.configure(fg=GREEN)
+            elif idx == active_index:
+                lbl_num.configure(bg=GREEN, fg="#000000", text=str(idx))
+                lbl_txt.configure(fg=TEXT)
             else:
-                circle.configure(
-                    bg=SURFACE_2,
-                    fg=MUTED,
-                    text=str(index)
-                )
+                lbl_num.configure(bg=SURFACE_2, fg=MUTED, text=str(idx))
+                lbl_txt.configure(fg=MUTED)
 
-                label.configure(
-                    fg=MUTED
-                )
-
-    def clear_container(self):
-
-        for widget in self.container.winfo_children():
+    def clear_content(self):
+        """Clear dynamic middle area."""
+        for widget in self.content_frame.winfo_children():
             widget.destroy()
 
-    def create_button(
-        self,
-        parent,
-        text,
-        command,
-        primary=False
-    ):
-
-        if primary:
-
-            button = tk.Button(
-                parent,
-                text=text,
-                command=command,
-                bg=GREEN,
-                fg="#000000",
-                activebackground=GREEN_HOVER,
-                activeforeground="#000000",
-                font=("Segoe UI", 10, "bold"),
-                relief="flat",
-                bd=0,
-                padx=22,
-                pady=9,
-                cursor="hand2"
-            )
-
-        else:
-
-            button = tk.Button(
-                parent,
-                text=text,
-                command=command,
-                bg=SURFACE_2,
-                fg=TEXT,
-                activebackground=BORDER,
-                activeforeground=TEXT,
-                font=("Segoe UI", 10),
-                relief="flat",
-                bd=0,
-                padx=18,
-                pady=9,
-                cursor="hand2"
-            )
-
-        return button
-
-    def create_card(self, parent):
-
-        return tk.Frame(
-            parent,
-            bg=SURFACE,
-            highlightbackground=BORDER,
-            highlightthickness=1
-        )
-
     # ============================================================
-    # STEP 1
+    # STEP 1: WELCOME
     # ============================================================
 
     def show_welcome(self):
-
         self.current_step = 1
         self.update_steps(1)
-        self.clear_container()
+        self.clear_content()
 
-        title = tk.Label(
-            self.container,
+        # Update Navigation Footer
+        self.btn_back.pack_forget()
+        self.btn_next.pack(side="right", padx=(8, 0))
+        self.btn_next.configure(
+            text="Continue →",
+            command=self.show_privacy,
+            bg=GREEN,
+            fg="#000000",
+            state="normal",
+            cursor="hand2"
+        )
+
+        tk.Label(
+            self.content_frame,
             text="Welcome to TuneFetch",
             bg=BG,
             fg=TEXT,
-            font=("Segoe UI", 25, "bold")
-        )
+            font=("Segoe UI", 20, "bold")
+        ).pack(anchor="w", pady=(0, 4))
 
-        title.pack(anchor="w")
-
-        subtitle = tk.Label(
-            self.container,
-            text="Install the lightweight TuneFetch desktop engine.",
+        tk.Label(
+            self.content_frame,
+            text="Install the high-speed Spotify 320 kbps terminal downloader.",
             bg=BG,
             fg=MUTED,
-            font=("Segoe UI", 11)
-        )
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=(0, 16))
 
-        subtitle.pack(
-            anchor="w",
-            pady=(5, 22)
-        )
+        # Overview Card
+        card = tk.Frame(self.content_frame, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+        card.pack(fill="x", pady=(0, 14))
 
-        card = self.create_card(self.container)
-
-        card.pack(
-            fill="x"
-        )
-
-        items = [
-            ("✓", "Standalone desktop engine", "Lightweight Windows executable"),
-            ("✓", "Spotify playlist sessions", "Synchronize playlists with TuneFetch"),
-            ("✓", "Local processing", "Downloads are processed on your computer"),
-            ("✓", "320 kbps MP3 output", "High-quality audio output"),
+        features = [
+            ("🎵", "Studio 320 kbps MP3", "Embedded high-res Spotify cover art & ID3 metadata"),
+            ("⚡", "1-Line Terminal Engine", "Type 'tunefetch TF-XXXX' in any terminal to download"),
+            ("🔒", "100% Private & Safe", "Files process on your PC. No server limits or adware")
         ]
 
-        for symbol, heading, description in items:
+        for icon, title, desc in features:
+            row = tk.Frame(card, bg=SURFACE)
+            row.pack(fill="x", padx=16, pady=10)
 
-            row = tk.Frame(
-                card,
-                bg=SURFACE
-            )
+            tk.Label(row, text=icon, bg=SURFACE, font=("Segoe UI", 13)).pack(side="left", padx=(0, 12))
+            text_box = tk.Frame(row, bg=SURFACE)
+            text_box.pack(side="left", fill="x")
 
-            row.pack(
-                fill="x",
-                padx=22,
-                pady=14
-            )
+            tk.Label(text_box, text=title, bg=SURFACE, fg=TEXT, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+            tk.Label(text_box, text=desc, bg=SURFACE, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
 
-            icon = tk.Label(
-                row,
-                text=symbol,
-                bg=SURFACE,
-                fg=GREEN,
-                font=("Segoe UI", 13, "bold")
-            )
-
-            icon.pack(
-                side="left",
-                padx=(0, 14)
-            )
-
-            text_frame = tk.Frame(
-                row,
-                bg=SURFACE
-            )
-
-            text_frame.pack(
-                side="left"
-            )
-
-            tk.Label(
-                text_frame,
-                text=heading,
-                bg=SURFACE,
-                fg=TEXT,
-                font=("Segoe UI", 10, "bold")
-            ).pack(anchor="w")
-
-            tk.Label(
-                text_frame,
-                text=description,
-                bg=SURFACE,
-                fg=MUTED,
-                font=("Segoe UI", 9)
-            ).pack(anchor="w", pady=(2, 0))
-
-        # Install location
-        location_title = tk.Label(
-            self.container,
-            text="Installation location",
+        # Install Directory
+        tk.Label(
+            self.content_frame,
+            text="Installation Folder (Added to Windows PATH):",
             bg=BG,
             fg=TEXT,
-            font=("Segoe UI", 10, "bold")
-        )
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(8, 4))
 
-        location_title.pack(
-            anchor="w",
-            pady=(22, 7)
-        )
-
-        location = tk.Label(
-            self.container,
+        path_box = tk.Label(
+            self.content_frame,
             text=self.install_dir_var.get(),
             bg=SURFACE_2,
-            fg=MUTED,
+            fg="#cbd5e1",
+            font=("Consolas", 9),
             anchor="w",
-            padx=14,
-            pady=10,
-            font=("Consolas", 9)
-        )
-
-        location.pack(
-            fill="x"
-        )
-
-        # Buttons
-        buttons = tk.Frame(
-            self.container,
-            bg=BG
-        )
-
-        buttons.pack(
-            fill="x",
-            side="bottom",
-            pady=(20, 0)
-        )
-
-        cancel = self.create_button(
-            buttons,
-            "Cancel",
-            self.destroy
-        )
-
-        cancel.pack(
-            side="right"
-        )
-
-        next_button = self.create_button(
-            buttons,
-            "Continue  →",
-            self.show_privacy,
-            primary=True
-        )
-
-        next_button.pack(
-            side="right",
-            padx=(0, 10)
-        )
-
-    # ============================================================
-    # STEP 2
-    # ============================================================
-
-    def show_privacy(self):
-
-        self.current_step = 2
-        self.update_steps(2)
-        self.clear_container()
-
-        title = tk.Label(
-            self.container,
-            text="License & Privacy",
-            bg=BG,
-            fg=TEXT,
-            font=("Segoe UI", 25, "bold")
-        )
-
-        title.pack(anchor="w")
-
-        subtitle = tk.Label(
-            self.container,
-            text="Please review the information before continuing.",
-            bg=BG,
-            fg=MUTED,
-            font=("Segoe UI", 11)
-        )
-
-        subtitle.pack(
-            anchor="w",
-            pady=(5, 15)
-        )
-
-        text_frame = tk.Frame(
-            self.container,
-            bg=SURFACE,
+            padx=12,
+            pady=8,
             highlightbackground=BORDER,
             highlightthickness=1
         )
+        path_box.pack(fill="x")
 
-        text_frame.pack(
-            fill="both",
-            expand=True
+    # ============================================================
+    # STEP 2: LICENSE & PRIVACY (MANDATORY AGREEMENT)
+    # ============================================================
+
+    def show_privacy(self):
+        self.current_step = 2
+        self.update_steps(2)
+        self.clear_content()
+
+        # Update Navigation Footer
+        self.btn_back.pack(side="right", padx=(0, 8))
+        self.btn_back.configure(command=self.show_welcome)
+        self.btn_next.pack(side="right")
+        self.btn_next.configure(
+            text="Install TuneFetch",
+            command=self.validate_and_install
         )
+        self.toggle_install_button()
 
-        scrollbar = tk.Scrollbar(
-            text_frame
-        )
+        tk.Label(
+            self.content_frame,
+            text="License & Privacy Terms",
+            bg=BG,
+            fg=TEXT,
+            font=("Segoe UI", 20, "bold")
+        ).pack(anchor="w", pady=(0, 4))
 
-        scrollbar.pack(
-            side="right",
-            fill="y"
-        )
+        tk.Label(
+            self.content_frame,
+            text="Please review and accept the agreement before proceeding with installation.",
+            bg=BG,
+            fg=MUTED,
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=(0, 10))
 
-        text_box = tk.Text(
-            text_frame,
+        # Scrollable license text box
+        text_container = tk.Frame(self.content_frame, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+        text_container.pack(fill="both", expand=True, pady=(0, 12))
+
+        scrollbar = tk.Scrollbar(text_container)
+        scrollbar.pack(side="right", fill="y")
+
+        text_widget = tk.Text(
+            text_container,
             wrap="word",
             bg=SURFACE,
-            fg="#dbe4ee",
-            insertbackground=TEXT,
-            selectbackground=GREEN,
-            selectforeground="#000000",
+            fg="#e2e8f0",
             font=("Segoe UI", 9),
-            padx=18,
-            pady=16,
+            padx=14,
+            pady=12,
             bd=0,
             relief="flat",
             yscrollcommand=scrollbar.set
         )
+        text_widget.insert("1.0", LICENSE_AND_PRIVACY.strip())
+        text_widget.configure(state="disabled")
+        text_widget.pack(fill="both", expand=True)
+        scrollbar.configure(command=text_widget.yview)
 
-        text_box.insert(
-            "1.0",
-            LICENSE_AND_PRIVACY.strip()
-        )
-
-        text_box.configure(
-            state="disabled"
-        )
-
-        text_box.pack(
-            fill="both",
-            expand=True
-        )
-
-        scrollbar.configure(
-            command=text_box.yview
-        )
-
-        # Checkbox
-        checkbox = tk.Checkbutton(
-            self.container,
-            text="I have read and accept the License & Privacy Notice",
+        # Checkbox: Acceptance required to enable Install button
+        chk_box = tk.Checkbutton(
+            self.content_frame,
+            text="  I have read and agree to the License & Privacy Terms",
             variable=self.accepted_terms,
+            command=self.toggle_install_button,
             bg=BG,
             fg=TEXT,
             activebackground=BG,
@@ -676,616 +388,286 @@ class TuneFetchInstaller(tk.Tk):
             font=("Segoe UI", 9, "bold"),
             cursor="hand2"
         )
+        chk_box.pack(anchor="w", pady=(0, 4))
 
-        checkbox.pack(
-            anchor="w",
-            pady=(13, 10)
-        )
-
-        buttons = tk.Frame(
-            self.container,
-            bg=BG
-        )
-
-        buttons.pack(
-            fill="x"
-        )
-
-        back = self.create_button(
-            buttons,
-            "←  Back",
-            self.show_welcome
-        )
-
-        back.pack(
-            side="left"
-        )
-
-        continue_button = self.create_button(
-            buttons,
-            "Continue  →",
-            self.validate_terms,
-            primary=True
-        )
-
-        continue_button.pack(
-            side="right"
-        )
-
-    def validate_terms(self):
-
-        if not self.accepted_terms.get():
-
-            messagebox.showwarning(
-                "Agreement Required",
-                "Please review and accept the License & Privacy Notice before continuing."
+    def toggle_install_button(self):
+        """Enables or disables the Install button based on terms acceptance."""
+        if self.accepted_terms.get():
+            self.btn_next.configure(
+                state="normal",
+                bg=GREEN,
+                fg="#000000",
+                activebackground=GREEN_HOVER,
+                cursor="hand2"
+            )
+        else:
+            self.btn_next.configure(
+                state="disabled",
+                bg=DISABLED_BG,
+                fg=DISABLED_FG,
+                cursor="arrow"
             )
 
+    def validate_and_install(self):
+        if not self.accepted_terms.get():
+            messagebox.showwarning(
+                "Agreement Required",
+                "You must accept the License & Privacy Terms to install TuneFetch."
+            )
             return
-
-        self.show_install()
+        self.show_installing()
 
     # ============================================================
-    # STEP 3
+    # STEP 3: INSTALLATION
     # ============================================================
 
-    def show_install(self):
-
+    def show_installing(self):
         self.current_step = 3
         self.update_steps(3)
-        self.clear_container()
+        self.clear_content()
 
-        title = tk.Label(
-            self.container,
-            text="Installing TuneFetch",
+        # Disable navigation buttons during installation
+        self.btn_back.pack_forget()
+        self.btn_next.configure(state="disabled", bg=DISABLED_BG, fg=DISABLED_FG)
+        self.btn_cancel.configure(state="disabled")
+
+        tk.Label(
+            self.content_frame,
+            text="Installing TuneFetch...",
             bg=BG,
             fg=TEXT,
-            font=("Segoe UI", 25, "bold")
-        )
+            font=("Segoe UI", 20, "bold")
+        ).pack(anchor="w", pady=(0, 4))
 
-        title.pack(anchor="w")
-
-        subtitle = tk.Label(
-            self.container,
-            text="Setting up the desktop engine on your computer.",
+        tk.Label(
+            self.content_frame,
+            text="Copying executable and configuring system environment.",
             bg=BG,
             fg=MUTED,
-            font=("Segoe UI", 11)
-        )
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=(0, 20))
 
-        subtitle.pack(
-            anchor="w",
-            pady=(5, 25)
-        )
-
-        card = self.create_card(
-            self.container
-        )
-
-        card.pack(
-            fill="x"
-        )
+        # Installation Status Card
+        card = tk.Frame(self.content_frame, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+        card.pack(fill="x", pady=(0, 16))
 
         self.status_label = tk.Label(
             card,
             text="Preparing installation...",
             bg=SURFACE,
             fg=TEXT,
-            font=("Segoe UI", 11, "bold")
+            font=("Segoe UI", 10, "bold")
         )
+        self.status_label.pack(anchor="w", padx=20, pady=(16, 10))
 
-        self.status_label.pack(
-            anchor="w",
-            padx=22,
-            pady=(22, 12)
-        )
-
-        self.progress = ttk.Progressbar(
-            card,
-            mode="indeterminate"
-        )
-
-        self.progress.pack(
-            fill="x",
-            padx=22,
-            pady=(0, 18)
-        )
+        self.progress_bar = ttk.Progressbar(card, mode="determinate", maximum=100)
+        self.progress_bar.pack(fill="x", padx=20, pady=(0, 14))
 
         self.detail_label = tk.Label(
             card,
-            text=f"Install location:\n{self.install_dir_var.get()}",
+            text=f"Target: {self.install_dir_var.get()}",
             bg=SURFACE,
             fg=MUTED,
-            justify="left",
-            font=("Consolas", 9)
+            font=("Consolas", 8)
         )
+        self.detail_label.pack(anchor="w", padx=20, pady=(0, 16))
 
-        self.detail_label.pack(
-            anchor="w",
-            padx=22,
-            pady=(0, 22)
-        )
-
-        self.install_steps_label = tk.Label(
-            self.container,
-            text="✓ Creating installation directory\n"
-                 "○ Copying TuneFetch engine\n"
-                 "○ Registering command in PATH\n"
-                 "○ Finalizing installation",
-            bg=BG,
-            fg=MUTED,
-            justify="left",
-            font=("Segoe UI", 9),
-            pady=20
-        )
-
-        self.install_steps_label.pack(
-            anchor="w"
-        )
-
-        self.progress.start(10)
-
-        self.after(
-            700,
-            self.perform_installation
-        )
-
-    # ============================================================
-    # INSTALLATION LOGIC
-    # ============================================================
+        # Run extraction
+        self.after(500, self.perform_installation)
 
     def add_to_user_path(self, install_dir):
-
+        """Adds install_dir to HKCU Environment PATH."""
         try:
-
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Environment",
-                0,
-                winreg.KEY_ALL_ACCESS
-            )
-
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_ALL_ACCESS)
             try:
-                current_path, _ = winreg.QueryValueEx(
-                    key,
-                    "Path"
-                )
-
+                current_path, _ = winreg.QueryValueEx(key, "Path")
             except FileNotFoundError:
                 current_path = ""
 
-            paths = [
-                p.strip()
-                for p in current_path.split(";")
-                if p.strip()
-            ]
+            paths = [p.strip() for p in current_path.split(";") if p.strip()]
+            normalized = [os.path.normcase(os.path.normpath(p)) for p in paths]
+            target_norm = os.path.normcase(os.path.normpath(install_dir))
 
-            normalized = [
-                os.path.normcase(os.path.normpath(p))
-                for p in paths
-            ]
-
-            target_normalized = os.path.normcase(
-                os.path.normpath(install_dir)
-            )
-
-            if target_normalized not in normalized:
-
-                paths.append(
-                    install_dir
-                )
-
+            if target_norm not in normalized:
+                paths.append(install_dir)
                 new_path = ";".join(paths)
-
-                winreg.SetValueEx(
-                    key,
-                    "Path",
-                    0,
-                    winreg.REG_EXPAND_SZ,
-                    new_path
-                )
+                winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
 
             winreg.CloseKey(key)
 
-            # Notify Windows
+            # Broadcast environment update to running Windows processes
             try:
-
                 import ctypes
-
                 HWND_BROADCAST = 0xFFFF
                 WM_SETTINGCHANGE = 0x001A
                 SMTO_ABORTIFHUNG = 0x0002
-
-                result = ctypes.c_ulong()
-
+                res = ctypes.c_ulong()
                 ctypes.windll.user32.SendMessageTimeoutW(
-                    HWND_BROADCAST,
-                    WM_SETTINGCHANGE,
-                    0,
-                    "Environment",
-                    SMTO_ABORTIFHUNG,
-                    1000,
-                    ctypes.byref(result)
+                    HWND_BROADCAST, WM_SETTINGCHANGE, 0, "Environment", SMTO_ABORTIFHUNG, 1000, ctypes.byref(res)
                 )
-
             except Exception:
                 pass
-
         except Exception as error:
-
-            print(
-                f"[!] Could not update User PATH: {error}"
-            )
+            print(f"[!] Path update warning: {error}")
 
     def get_source_engine_exe(self):
-
+        """Locates the bundled TuneFetch.exe engine."""
         candidates = []
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            candidates.append(os.path.join(sys._MEIPASS, "TuneFetch.exe"))
+            candidates.append(os.path.join(sys._MEIPASS, "tunefetch.exe"))
 
-        if getattr(sys, "frozen", False) and hasattr(
-            sys,
-            "_MEIPASS"
-        ):
-
-            candidates.extend([
-                os.path.join(
-                    sys._MEIPASS,
-                    "TuneFetch.exe"
-                ),
-                os.path.join(
-                    sys._MEIPASS,
-                    "tunefetch.exe"
-                )
-            ])
-
-        exe_dir = (
-            os.path.dirname(sys.executable)
-            if getattr(sys, "frozen", False)
-            else os.path.dirname(__file__)
-        )
-
+        exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
         candidates.extend([
-            os.path.join(
-                exe_dir,
-                "TuneFetch.exe"
-            ),
-            os.path.join(
-                exe_dir,
-                "dist",
-                "TuneFetch.exe"
-            ),
-            os.path.join(
-                exe_dir,
-                "static",
-                "TuneFetch.exe"
-            ),
-            os.path.join(
-                os.getcwd(),
-                "dist",
-                "TuneFetch.exe"
-            ),
-            os.path.join(
-                os.getcwd(),
-                "backend",
-                "static",
-                "TuneFetch.exe"
-            )
+            os.path.join(exe_dir, "TuneFetch.exe"),
+            os.path.join(exe_dir, "dist", "TuneFetch.exe"),
+            os.path.join(exe_dir, "static", "TuneFetch.exe"),
+            os.path.join(os.getcwd(), "dist", "TuneFetch.exe"),
+            os.path.join(os.getcwd(), "backend", "static", "TuneFetch.exe")
         ])
 
-        for candidate in candidates:
-
-            if (
-                os.path.exists(candidate)
-                and os.path.isfile(candidate)
-            ):
-
-                return candidate
-
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
         return None
 
     def perform_installation(self):
-
         target_dir = self.install_dir_var.get()
-
         try:
+            # 1. Create target folder
+            self.status_label.configure(text="Creating program folder...")
+            self.progress_bar["value"] = 25
+            os.makedirs(target_dir, exist_ok=True)
 
-            # Step 1
-            self.status_label.configure(
-                text="Creating installation directory..."
-            )
-
-            os.makedirs(
-                target_dir,
-                exist_ok=True
-            )
-
-            target_exe = os.path.join(
-                target_dir,
-                "tunefetch.exe"
-            )
-
-            # Step 2
-            self.status_label.configure(
-                text="Copying TuneFetch desktop engine..."
-            )
-
+            # 2. Copy binary
+            self.status_label.configure(text="Extracting TuneFetch CLI engine...")
+            self.progress_bar["value"] = 55
+            target_exe = os.path.join(target_dir, "tunefetch.exe")
             source_exe = self.get_source_engine_exe()
 
             if source_exe and os.path.exists(source_exe):
-
-                shutil.copy2(
-                    source_exe,
-                    target_exe
-                )
-
+                shutil.copy2(source_exe, target_exe)
             elif getattr(sys, "frozen", False):
-
-                shutil.copy2(
-                    sys.executable,
-                    target_exe
-                )
-
+                shutil.copy2(sys.executable, target_exe)
             else:
+                raise FileNotFoundError("TuneFetch.exe engine was not found in the installer bundle.")
 
-                raise FileNotFoundError(
-                    "TuneFetch.exe desktop engine was not found."
-                )
+            # 3. Add to PATH
+            self.status_label.configure(text="Registering 'tunefetch' in system PATH...")
+            self.progress_bar["value"] = 80
+            self.add_to_user_path(target_dir)
 
-            # Step 3
-            self.status_label.configure(
-                text="Registering TuneFetch in Windows PATH..."
-            )
+            # 4. Finish
+            self.status_label.configure(text="Installation completed successfully!")
+            self.progress_bar["value"] = 100
 
-            self.add_to_user_path(
-                target_dir
-            )
+            self.after(500, self.show_complete)
 
-            # Step 4
-            self.status_label.configure(
-                text="Finalizing installation..."
-            )
-
-            self.install_steps_label.configure(
-                text="✓ Creating installation directory\n"
-                     "✓ Copying TuneFetch engine\n"
-                     "✓ Registering command in PATH\n"
-                     "✓ Finalizing installation",
-                fg=GREEN
-            )
-
-            self.progress.stop()
-
-            self.after(
-                500,
-                self.show_complete
-            )
-
-        except Exception as error:
-
-            self.progress.stop()
-
-            messagebox.showerror(
-                "Installation Failed",
-                f"TuneFetch could not be installed.\n\n{error}"
-            )
-
+        except Exception as err:
+            messagebox.showerror("Installation Error", f"Installation failed:\n\n{err}")
             self.show_welcome()
 
     # ============================================================
-    # STEP 4
+    # STEP 4: COMPLETE
     # ============================================================
 
     def show_complete(self):
-
         self.current_step = 4
         self.update_steps(4)
-        self.clear_container()
+        self.clear_content()
 
-        success_icon = tk.Label(
-            self.container,
-            text="✓",
-            bg=BG,
-            fg=GREEN,
-            font=("Segoe UI", 48, "bold")
-        )
-
-        success_icon.pack(
-            pady=(10, 0)
-        )
-
-        title = tk.Label(
-            self.container,
-            text="You're all set",
-            bg=BG,
-            fg=TEXT,
-            font=("Segoe UI", 26, "bold")
-        )
-
-        title.pack(
-            pady=(0, 5)
-        )
-
-        subtitle = tk.Label(
-            self.container,
-            text="TuneFetch has been installed successfully.",
-            bg=BG,
-            fg=MUTED,
-            font=("Segoe UI", 11)
-        )
-
-        subtitle.pack(
-            pady=(0, 22)
-        )
-
-        command_card = self.create_card(
-            self.container
-        )
-
-        command_card.pack(
-            fill="x"
-        )
-
-        tk.Label(
-            command_card,
-            text="START A DOWNLOAD SESSION",
-            bg=SURFACE,
-            fg=GREEN,
-            font=("Segoe UI", 9, "bold")
-        ).pack(
-            anchor="w",
-            padx=22,
-            pady=(20, 8)
-        )
-
-        tk.Label(
-            command_card,
-            text="Open a new Command Prompt or PowerShell and run:",
-            bg=SURFACE,
-            fg=MUTED,
-            font=("Segoe UI", 9)
-        ).pack(
-            anchor="w",
-            padx=22
-        )
-
-        command = tk.Frame(
-            command_card,
-            bg=BG,
-            highlightbackground=BORDER,
-            highlightthickness=1
-        )
-
-        command.pack(
-            fill="x",
-            padx=22,
-            pady=12
-        )
-
-        tk.Label(
-            command,
-            text="tunefetch TF-XXXX",
-            bg=BG,
-            fg=TEXT,
-            font=("Consolas", 11, "bold")
-        ).pack(
-            side="left",
-            padx=14,
-            pady=12
-        )
-
-        def copy_command():
-
-            self.clipboard_clear()
-            self.clipboard_append(
-                "tunefetch TF-XXXX"
-            )
-
-            copy_button.configure(
-                text="Copied ✓"
-            )
-
-            self.after(
-                1500,
-                lambda: copy_button.configure(
-                    text="Copy"
-                )
-            )
-
-        copy_button = tk.Button(
-            command,
-            text="Copy",
-            command=copy_command,
-            bg=SURFACE_2,
-            fg=TEXT,
-            activebackground=BORDER,
-            activeforeground=TEXT,
-            font=("Segoe UI", 9, "bold"),
-            relief="flat",
-            bd=0,
-            padx=12,
+        # Update Navigation Footer
+        self.btn_cancel.pack_forget()
+        self.btn_back.pack_forget()
+        self.btn_next.pack(side="right")
+        self.btn_next.configure(
+            text="Finish",
+            command=self.destroy,
+            bg=GREEN,
+            fg="#000000",
+            state="normal",
             cursor="hand2"
         )
 
-        copy_button.pack(
-            side="right",
-            padx=6,
-            pady=6
-        )
+        tk.Label(
+            self.content_frame,
+            text="✓ Installation Complete!",
+            bg=BG,
+            fg=GREEN,
+            font=("Segoe UI", 20, "bold")
+        ).pack(anchor="w", pady=(0, 4))
 
         tk.Label(
-            command_card,
-            text="Replace TF-XXXX with the session code generated on the TuneFetch website.",
-            bg=SURFACE,
+            self.content_frame,
+            text="TuneFetch is now ready to use from any Command Prompt or PowerShell.",
+            bg=BG,
             fg=MUTED,
-            font=("Segoe UI", 9),
-            wraplength=620,
-            justify="left"
-        ).pack(
-            anchor="w",
-            padx=22,
-            pady=(0, 20)
-        )
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=(0, 16))
 
-        location_card = self.create_card(
-            self.container
-        )
-
-        location_card.pack(
-            fill="x",
-            pady=(14, 0)
-        )
+        # Command Box
+        cmd_card = tk.Frame(self.content_frame, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+        cmd_card.pack(fill="x", pady=(0, 14))
 
         tk.Label(
-            location_card,
-            text="DOWNLOAD LOCATION",
+            cmd_card,
+            text="HOW TO DOWNLOAD PLAYLISTS:",
             bg=SURFACE,
             fg=GREEN,
             font=("Segoe UI", 8, "bold")
-        ).pack(
-            anchor="w",
-            padx=18,
-            pady=(14, 4)
-        )
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+
+        cmd_row = tk.Frame(cmd_card, bg=BG, highlightbackground=BORDER, highlightthickness=1)
+        cmd_row.pack(fill="x", padx=16, pady=(4, 10))
 
         tk.Label(
-            location_card,
-            text=os.path.join(
-                "Downloads",
-                "Thanks for downloading"
-            ),
-            bg=SURFACE,
+            cmd_row,
+            text="tunefetch TF-XXXX",
+            bg=BG,
+            fg="#38bdf8",
+            font=("Consolas", 11, "bold")
+        ).pack(side="left", padx=12, pady=8)
+
+        def copy_cmd():
+            self.clipboard_clear()
+            self.clipboard_append("tunefetch TF-XXXX")
+            btn_copy.configure(text="Copied ✓")
+            self.after(1500, lambda: btn_copy.configure(text="Copy"))
+
+        btn_copy = tk.Button(
+            cmd_row,
+            text="Copy",
+            command=copy_cmd,
+            bg=SURFACE_2,
             fg=TEXT,
-            font=("Consolas", 9)
-        ).pack(
-            anchor="w",
-            padx=18,
-            pady=(0, 14)
+            font=("Segoe UI", 8, "bold"),
+            relief="flat",
+            bd=0,
+            padx=10,
+            cursor="hand2"
         )
+        btn_copy.pack(side="right", padx=6, pady=4)
 
-        buttons = tk.Frame(
-            self.container,
-            bg=BG
-        )
+        tk.Label(
+            cmd_card,
+            text="Replace TF-XXXX with the code generated on the TuneFetch web app.\nSongs download directly into your Downloads folder.",
+            bg=SURFACE,
+            fg=MUTED,
+            font=("Segoe UI", 8),
+            justify="left"
+        ).pack(anchor="w", padx=16, pady=(0, 14))
 
-        buttons.pack(
-            fill="x",
-            side="bottom",
-            pady=(18, 0)
-        )
+    def go_back(self):
+        if self.current_step == 2:
+            self.show_welcome()
 
-        finish = self.create_button(
-            buttons,
-            "Finish",
-            self.destroy,
-            primary=True
-        )
-
-        finish.pack(
-            side="right"
-        )
+    def go_next(self):
+        if self.current_step == 1:
+            self.show_privacy()
+        elif self.current_step == 2:
+            self.validate_and_install()
 
 
 if __name__ == "__main__":
-
     app = TuneFetchInstaller()
-
     app.mainloop()

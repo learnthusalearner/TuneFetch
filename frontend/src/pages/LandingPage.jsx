@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 // Modular landing components
-import MusicalCursor from '../components/landing/MusicalCursor';
 import LandingNav from '../components/landing/LandingNav';
 import HeroSection from '../components/landing/HeroSection';
 import TickerMarquee from '../components/landing/TickerMarquee';
@@ -18,25 +17,11 @@ import LandingFooter from '../components/landing/LandingFooter';
 
 /**
  * LandingPage
- * High-performance Antigravity-style showcase page composed of modular sections.
+ * High-performance showcase page composed of modular sections.
  */
 export default function LandingPage({ onLaunch, onPrivacy, spotifyStatus }) {
   const isConnected = spotifyStatus?.connected;
   const displayName = spotifyStatus?.spotify_user?.display_name;
-
-  /* ── Mouse position & cursor state for Spotify interactive cursor ── */
-  const [mousePos, setMousePos] = useState({ x: -200, y: -200 });
-  const [isCursorActive, setIsCursorActive] = useState(false);
-  const [isClicking, setIsClicking] = useState(false);
-
-  const handleMouseMove = (e) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
-    if (!isCursorActive) setIsCursorActive(true);
-  };
-
-  const handleMouseLeave = () => {
-    setIsCursorActive(false);
-  };
 
   const scrollToComparison = () => {
     document.getElementById('comparison-section')?.scrollIntoView({ behavior: 'smooth' });
@@ -45,18 +30,8 @@ export default function LandingPage({ onLaunch, onPrivacy, spotifyStatus }) {
   return (
     <div
       className="landing-root"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onMouseDown={() => setIsClicking(true)}
-      onMouseUp={() => setIsClicking(false)}
       style={{ position: 'relative', overflowX: 'hidden' }}
     >
-      {/* Interactive Spotify Musical Cursor with Staggered Vanishing Notes */}
-      <MusicalCursor
-        mousePos={mousePos}
-        isCursorActive={isCursorActive}
-        isClicking={isClicking}
-      />
 
       {/* Frosted Sticky Navigation Bar */}
       <LandingNav
