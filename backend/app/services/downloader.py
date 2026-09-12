@@ -688,7 +688,7 @@ class DownloadManager:
             # Active cookies and direct network configuration
             active_cookies = custom_cookies or get_cookie_jar()
 
-            # 1 & 2. Fetch and download audio stream with multi-client resilience
+            # 1 & 2. Fetch and download audio stream with multi-client & candidate fallback resilience
             download_success = False
             last_err = None
             video_title = custom_title or "Audio"
@@ -696,59 +696,83 @@ class DownloadManager:
             thumbnail = ""
 
             configure_urllib_network(custom_cookies=active_cookies)
-            for client_name in CLIENT_FALLBACK_ORDER:
-                try:
-                    yt = build_pytubefix_instance(
-                        url=target_url,
-                        client=client_name,
-                        on_progress_callback=on_progress
-                    )
-                    video_title = custom_title or yt.title or "Audio"
-                    video_artist = custom_artist or yt.author or ""
-                    thumbnail = yt.thumbnail_url or ""
 
-                    all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
-                    audio_stream = None
-                    non_sabr = [s for s in all_audio if not getattr(s, "is_sabr", False)]
-                    if non_sabr:
-                        audio_stream = non_sabr[0]
-                    elif yt.streams.get_audio_only():
-                        audio_stream = yt.streams.get_audio_only()
-                    elif all_audio and len(all_audio) > 0:
-                        audio_stream = all_audio.first()
+            candidate_urls = [target_url]
+            c_idx = 0
+            while c_idx < len(candidate_urls):
+                current_url = candidate_urls[c_idx]
 
-                    if not audio_stream:
-                        continue
+                for client_name in CLIENT_FALLBACK_ORDER:
+                    try:
+                        yt = build_pytubefix_instance(
+                            url=current_url,
+                            client=client_name,
+                            on_progress_callback=on_progress
+                        )
+                        video_title = custom_title or yt.title or "Audio"
+                        video_artist = custom_artist or yt.author or ""
+                        thumbnail = yt.thumbnail_url or ""
 
-                    stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
-                    temp_filename = f"{task_id}_raw.{stream_ext}"
-                    candidate_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
+                        all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+                        audio_stream = None
+                        non_sabr = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+                        if non_sabr:
+                            audio_stream = non_sabr[0]
+                        elif yt.streams.get_audio_only():
+                            audio_stream = yt.streams.get_audio_only()
+                        elif all_audio and len(all_audio) > 0:
+                            audio_stream = all_audio.first()
 
-                    if os.path.exists(candidate_filepath):
-                        try:
-                            os.remove(candidate_filepath)
-                        except Exception:
-                            pass
+                        if not audio_stream:
+                            continue
 
-                    audio_stream.download(
-                        output_path=DOWNLOADS_DIR,
-                        filename=temp_filename
-                    )
+                        stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
+                        temp_filename = f"{task_id}_raw.{stream_ext}"
+                        candidate_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
 
-                    if os.path.exists(candidate_filepath) and os.path.getsize(candidate_filepath) > 1024:
-                        raw_temp_filepath = candidate_filepath
-                        download_success = True
-                        break
-                    else:
                         if os.path.exists(candidate_filepath):
                             try:
                                 os.remove(candidate_filepath)
                             except Exception:
                                 pass
-                        logger.warning(f"Client '{client_name}' stream download was empty or corrupted (<1KB).")
-                except Exception as client_err:
-                    last_err = client_err
-                    logger.warning(f"Download with client '{client_name}' failed: {client_err}")
+
+                        audio_stream.download(
+                            output_path=DOWNLOADS_DIR,
+                            filename=temp_filename
+                        )
+
+                        if os.path.exists(candidate_filepath) and os.path.getsize(candidate_filepath) > 1024:
+                            raw_temp_filepath = candidate_filepath
+                            download_success = True
+                            break
+                        else:
+                            if os.path.exists(candidate_filepath):
+                                try:
+                                    os.remove(candidate_filepath)
+                                except Exception:
+                                    pass
+                            logger.warning(f"Client '{client_name}' stream download was empty or corrupted (<1KB).")
+                    except Exception as client_err:
+                        last_err = client_err
+                        logger.warning(f"Download for '{current_url}' with client '{client_name}' failed: {client_err}")
+
+                if download_success:
+                    break
+
+                # If primary candidate URL failed, attempt YouTube search fallback for alternative public videos
+                if c_idx == 0 and len(candidate_urls) == 1:
+                    fallback_query = f"{custom_title or ''} {custom_artist or ''} audio".strip()
+                    if fallback_query:
+                        logger.info(f"Primary candidate URL '{current_url}' failed. Performing fallback search for '{fallback_query}'.")
+                        try:
+                            s = Search(fallback_query)
+                            for v in getattr(s, "videos", []):
+                                if v.watch_url not in candidate_urls:
+                                    candidate_urls.append(v.watch_url)
+                        except Exception as search_err:
+                            logger.warning(f"YouTube search fallback failed for '{fallback_query}': {search_err}")
+
+                c_idx += 1
 
             if not download_success or not raw_temp_filepath or not os.path.exists(raw_temp_filepath):
                 raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
