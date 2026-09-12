@@ -3,6 +3,16 @@ export const BACKEND_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
 export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 export const SPOTIFY_BASE = BACKEND_URL ? `${BACKEND_URL}/spotify` : '/spotify';
 
+export const isLocalhost = typeof window !== 'undefined' && Boolean(
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.port === '8000' ||
+  window.location.port === '5173'
+);
+
+export const CLOUD_WEB_URL = 'https://tune-fetch-tan.vercel.app';
+export const CLOUD_BACKEND_URL = 'https://tunefetch-t5mp.onrender.com';
+
 /**
  * Retrieves the persisted client-side user UUID.
  * Bypasses third-party cookie blocking on cross-origin deployments (Vercel <-> Render).
@@ -173,6 +183,10 @@ export const api = {
   getSpotifyAuthUrl() {
     const userId = getStoredUserId();
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    if (isLocalhost) {
+      // Local setup has no Spotify secrets: redirect to the Cloud Web App
+      return `${CLOUD_WEB_URL}/dashboard?from=local&port=8000`;
+    }
     return `${SPOTIFY_BASE}/auth${query}`;
   },
 
@@ -329,9 +343,11 @@ export const api = {
 
   /**
    * Generates a 24-hour cloud session code (e.g. TF-4982) holding the playlist songs JSON
+   * and candidate URLs resolved via PostgreSQL cache and Serper API.
    */
   async createCloudSession({ playlist_name, image = '', tracks = [] }) {
-    const res = await secureFetch(`${API_BASE}/cloud-session`, {
+    const url = isLocalhost ? `${CLOUD_BACKEND_URL}/api/cloud-session` : `${API_BASE}/cloud-session`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playlist_name, image, tracks })
@@ -347,7 +363,9 @@ export const api = {
    * Retrieves songs JSON by 6-digit session code (e.g. TF-4982)
    */
   async getCloudSession(code) {
-    const res = await secureFetch(`${API_BASE}/cloud-session/${encodeURIComponent(code.trim().toUpperCase())}`);
+    const clean = encodeURIComponent(code.trim().toUpperCase());
+    const url = isLocalhost ? `${CLOUD_BACKEND_URL}/api/cloud-session/${clean}` : `${API_BASE}/cloud-session/${clean}`;
+    const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Download session code not found or has expired.');

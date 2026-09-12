@@ -23,7 +23,7 @@ HOST = "127.0.0.1"
 DEFAULT_URL = f"http://{HOST}:{PORT}"
 
 # Setup local downloads folder in user's home Downloads
-USER_DOWNLOADS = Path.home() / "Downloads" / "TuneFetch"
+USER_DOWNLOADS = Path.home() / "Downloads" / "Thanks for downloading"
 os.makedirs(USER_DOWNLOADS, exist_ok=True)
 os.environ["DOWNLOADS_DIR"] = str(USER_DOWNLOADS)
 os.environ["FRONTEND_URL"] = DEFAULT_URL
@@ -63,8 +63,8 @@ def main():
          Spotify Playlist & High-Fidelity Audio Downloader            
 ======================================================================
 
-  [+] Server running at:  {app_url}
-  [+] Downloads saved to: {USER_DOWNLOADS}
+  [+] Local Engine running at: {app_url}
+  [+] Songs will save to:      {USER_DOWNLOADS}
   [+] Opening browser automatically...
 
   Enjoy your music! Keep this window running while downloading.
@@ -77,8 +77,9 @@ def main():
     threading.Thread(target=open_browser_delayed, args=(app_url,), daemon=True).start()
 
     # Run Uvicorn server (blocks until interrupted)
+    # log_config=None prevents crash in PyInstaller --windowed mode where sys.stdout is None
     try:
-        uvicorn.run(app, host=HOST, port=target_port, log_level="warning")
+        uvicorn.run(app, host=HOST, port=target_port, log_level="warning", log_config=None)
     except KeyboardInterrupt:
         print("\n[*] Shutting down TuneFetch Engine cleanly. Goodbye!")
         sys.exit(0)

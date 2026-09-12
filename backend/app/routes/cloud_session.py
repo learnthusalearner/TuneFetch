@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Response, Request
 from pydantic import BaseModel
 
+from app.core.database import SessionLocal
+from app.services.serper_service import SerperService
 from app.services.cloud_session_store import CloudSessionStore
 from app.services.local_batch_downloader import LocalBatchDownloader
 
@@ -31,26 +33,72 @@ class ImportSessionRequest(BaseModel):
 
 # ----------------- CLOUD SESSION ENDPOINTS (RUNS ON CLOUD / LOCAL) -----------------
 
+async def _resolve_tracks_candidate_urls(tracks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Checks PostgreSQL cache for candidate YouTube URLs.
+    If not cached, resolves via Serper and stores in PostgreSQL database.
+    """
+    db = None
+    try:
+        db = SessionLocal()
+        for trk in tracks:
+            if trk.get("candidate_url"):
+                continue
+            song_name = trk.get("song_name") or trk.get("title") or trk.get("name") or ""
+            artists = trk.get("artists") or trk.get("artist_name") or trk.get("artist") or ""
+            if not song_name:
+                continue
+            try:
+                candidate_url = await SerperService.find_best_audio_url(
+                    song_name=song_name,
+                    artists=artists,
+                    db=db
+                )
+                trk["candidate_url"] = candidate_url
+            except Exception as err:
+                logger.debug(f"Candidate URL resolution skipped/failed for '{song_name}': {err}")
+    except Exception as e:
+        logger.warning(f"Database session error while resolving candidate URLs: {e}")
+    finally:
+        if db:
+            db.close()
+    return tracks
+
 @router.post("/api/cloud-session")
-def create_cloud_session(req: CreateSessionRequest):
+async def create_cloud_session(req: CreateSessionRequest):
     """
     Called by Web App: Takes the songs JSON extracted via Spotify OAuth,
+    resolves candidate YouTube links using PostgreSQL cache & Serper API,
     and returns a short 4-digit code (e.g. TF-4982) valid for 24h.
     """
     if not req.tracks or len(req.tracks) == 0:
         raise HTTPException(status_code=400, detail="Cannot create session with empty tracks list.")
 
+    resolved_tracks = await _resolve_tracks_candidate_urls(req.tracks)
+
     code = CloudSessionStore.create_session(
         playlist_name=req.playlist_name,
-        tracks=req.tracks,
+        tracks=resolved_tracks,
         image=req.image
     )
     return {
         "success": True,
         "session_code": code,
-        "total_tracks": len(req.tracks),
+        "total_tracks": len(resolved_tracks),
         "playlist_name": req.playlist_name,
         "expires_in_hours": 24
+    }
+
+@router.post("/api/cloud-session/resolve")
+async def resolve_tracks_endpoint(req: CreateSessionRequest):
+    """
+    Resolves YouTube candidate URLs for a track list using PostgreSQL cache & Serper.
+    """
+    resolved = await _resolve_tracks_candidate_urls(req.tracks)
+    return {
+        "success": True,
+        "playlist_name": req.playlist_name,
+        "tracks": resolved
     }
 
 @router.get("/api/cloud-session/{code}")
@@ -86,7 +134,7 @@ def get_local_desktop_status(response: Response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Private-Network"] = "true"
 
-    downloads_dir = os.environ.get("DOWNLOADS_DIR", str(Path.home() / "Downloads" / "TuneFetch"))
+    downloads_dir = os.environ.get("DOWNLOADS_DIR", str(Path.home() / "Downloads" / "Thanks for downloading"))
     return {
         "status": "online",
         "mode": "desktop",

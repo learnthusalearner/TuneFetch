@@ -33,7 +33,6 @@ class SingleTrackDownloadRequest(BaseModel):
 def get_frontend_url(request: Request, state: Optional[str] = None) -> str:
     """
     Determines the correct frontend origin to redirect the user back to.
-    Never defaults to localhost if accessed from a deployed domain.
     """
     if state:
         try:
@@ -47,7 +46,7 @@ def get_frontend_url(request: Request, state: Optional[str] = None) -> str:
     if referer:
         try:
             parsed = urllib.parse.urlparse(referer)
-            if parsed.netloc and ("localhost" not in parsed.netloc and "127.0.0.1" not in parsed.netloc):
+            if parsed.netloc:
                 return f"{parsed.scheme}://{parsed.netloc}"
         except Exception:
             pass
@@ -57,10 +56,10 @@ def get_frontend_url(request: Request, state: Optional[str] = None) -> str:
         return "https://tune-fetch-tan.vercel.app"
 
     env_url = os.getenv("FRONTEND_URL", "")
-    if env_url and "localhost" not in env_url and "127.0.0.1" not in env_url:
+    if env_url:
         return env_url.rstrip("/")
 
-    return FRONTEND_URL or "https://tune-fetch-tan.vercel.app"
+    return FRONTEND_URL or "http://localhost:5173"
 
 @router.get("/auth")
 def spotify_auth_start(

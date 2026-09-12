@@ -94,11 +94,11 @@ export default function PlaylistTracksModal({
           tracks: targetTracks,
           format: selectedFormat
         });
-        setDesktopSuccessMsg(`⚡ Successfully sent ${targetTracks.length} tracks to TuneFetch Desktop! Files are downloading to your PC's Downloads/TuneFetch folder.`);
+        setDesktopSuccessMsg(`⚡ Successfully sent ${targetTracks.length} tracks to TuneFetch Desktop! Files are downloading one by one to your PC's 'Downloads/Thanks for downloading' folder.`);
         return;
       }
 
-      // 2. If desktop not open, generate cloud session code
+      // 2. If desktop not directly responding via fetch, generate cloud session code (resolved via PostgreSQL)
       const sessionData = await api.createCloudSession({
         playlist_name: playlist?.name || 'Spotify Playlist',
         image: playlist?.image || '',
@@ -733,10 +733,34 @@ export default function PlaylistTracksModal({
                   3
                 </span>
                 <span>
-                  All songs will download at full home speed directly into your <code>Downloads\TuneFetch</code> folder!
+                  All songs will download at full home speed directly into your <code>Downloads\Thanks for downloading</code> folder!
                 </span>
               </div>
             </div>
+
+            {/* 1-Click Launch Local Engine */}
+            <a
+              href={`http://127.0.0.1:8000/?session=${cloudSessionCode}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+                color: '#fff',
+                fontSize: '13px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                boxShadow: '0 4px 14px rgba(29, 185, 84, 0.35)'
+              }}
+            >
+              <ExternalLink size={15} />
+              <span>Open Local Engine &amp; Download (http://127.0.0.1:8000)</span>
+            </a>
 
             {/* Alternative Copy JSON Button */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>

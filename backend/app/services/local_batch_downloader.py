@@ -34,7 +34,7 @@ class LocalBatchDownloader:
         if base_downloads:
             user_downloads_root = Path(base_downloads)
         else:
-            user_downloads_root = Path.home() / "Downloads" / "TuneFetch"
+            user_downloads_root = Path.home() / "Downloads" / "Thanks for downloading"
             
         safe_folder = _sanitize_folder_name(playlist_name)
         target_folder = user_downloads_root / safe_folder

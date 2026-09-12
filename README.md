@@ -16,11 +16,19 @@
 
 ## 📖 Overview
 
-**TuneFetch** is an audio extraction, conversion, and Spotify playlist downloading platform. It features an asynchronous **Python (FastAPI + `yt-dlp`)** backend engine, **Neon PostgreSQL** with Fernet token encryption for multi-user Spotify OAuth, and a modern, responsive **React (Vite)** frontend with dark glassmorphism styling.
+**TuneFetch** is a hybrid audio extraction, conversion, and Spotify playlist downloading platform operating across two tightly integrated environments:
 
-TuneFetch connects directly with Spotify via OAuth 2.0 PKCE, retrieves public, private, and collaborative playlists (supporting 10, 100, 500, 1,400+ songs with automated pagination), resolves tracks to high-fidelity audio streams via a two-tier PostgreSQL cache and Serper Google Video search, and queues them through the high-throughput `yt-dlp` download engine.
+1. **🌐 Cloud Web App (Vercel Frontend + Render FastAPI Backend + Neon PostgreSQL)**:
+   - **Zero-Secret Client Exposure**: Manages multi-user **Spotify OAuth 2.0 PKCE** with encrypted token storage, completely keeping Spotify Developer secrets, Serper API keys, and database credentials safely hidden on the cloud server.
+   - **PostgreSQL Global Song Cache (`resolved_songs`)**: Every song discovered is matched and stored in Neon PostgreSQL. Repeated requests return cached high-fidelity candidate audio links in `< 5ms`, querying the Serper Google Video search API only on cache misses.
+   - **Cloud Session Generator**: Bundles playlist songs into a 4-digit session code (e.g. `TF-4982`) or hands off directly to the local desktop engine.
 
-Once converted, playlists can be saved **directly into an organized folder on your PC** (`TuneFetch_Music/{Playlist_Name}`) containing all `{Artist} - {Song Title}.mp3` files, eliminating the need to manually unzip archives!
+2. **💻 Local Downloader Engine (Standalone Desktop App or `http://127.0.0.1:8000`)**:
+   - **Zero Credentials Needed**: End users never need Spotify API keys, databases, or complex configurations on their computer.
+   - **Local High-Speed Execution**: Runs Python (`pytubefix`) directly on the user's computer to download each song one by one with maximum home internet bandwidth and zero datacenter bot-verification blocks (`429`).
+   - **Direct PC Folder Delivery**: All songs are downloaded directly into an organized folder on your computer:
+     `Downloads/Thanks for downloading`
+     with pristine `{Artist} - {Song Title}.mp3` tagging, album artwork, and zero ZIP extraction required!
 
 ---
 
@@ -768,13 +776,38 @@ http://localhost:5173
 cd frontend
 npm run build
 ```
-The compiled static assets will be output to `frontend/dist/`.
+The compiled static assets will be output to `frontend/dist/` and served by the backend from `backend/frontend_dist/`.
 
-#### Backend Production Server:
+#### Cloud Backend Production Server (Render):
 ```bash
 cd backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
+
+---
+
+### 7. Packaging & Running Standalone Desktop App (`TuneFetch.exe`)
+
+You can compile the entire application (embedded React frontend + local FastAPI engine + Python downloader) into a single standalone `.exe` for Windows with **zero configuration required by the user**:
+
+#### Step 1: Run the Automated Build Script
+From the project root:
+```bash
+python build_desktop_app.py
+```
+This script automatically:
+1. Re-compiles the React frontend via Vite.
+2. Copies static assets into `backend/frontend_dist/`.
+3. Invokes PyInstaller with `launcher.py` in windowed mode.
+4. Outputs the finished standalone executable to:
+   `dist/TuneFetch.exe`
+
+#### Step 2: Run TuneFetch Desktop
+Simply double-click `dist/TuneFetch.exe` (or run `python backend/launcher.py`):
+- **Port**: Listens on `http://127.0.0.1:8000`.
+- **Browser**: Opens your default browser automatically.
+- **Save Destination**: Downloads all audio files one by one directly into:
+  `Downloads/Thanks for downloading`
 
 ---
 
