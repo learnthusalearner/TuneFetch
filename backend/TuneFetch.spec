@@ -5,7 +5,7 @@ a = Analysis(
     ['C:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/launcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('frontend_dist', 'frontend_dist')],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

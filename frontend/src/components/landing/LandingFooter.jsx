@@ -4,7 +4,7 @@ import React from 'react';
  * LandingFooter
  * Clean semantic footer with meta keywords and brand summary.
  */
-export default function LandingFooter() {
+export default function LandingFooter({ onPrivacy }) {
   const chips = ['320 kbps MP3', 'PKCE OAuth 2.0', 'Neon DB Caching', 'Free Converter', 'Open Source'];
 
   return (
@@ -21,9 +21,20 @@ export default function LandingFooter() {
         ))}
       </div>
       <div style={{ marginTop: 12 }}>
-        <a href="/privacy" style={{ fontSize: 12, color: '#1DB954', fontWeight: 600, textDecoration: 'none' }}>
+        <button
+          onClick={onPrivacy}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#1DB954',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: 0
+          }}
+        >
           🛡️ Privacy Policy &amp; Security Guarantee
-        </a>
+        </button>
       </div>
     </footer>
   );

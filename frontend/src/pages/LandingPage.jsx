@@ -5,6 +5,7 @@ import MusicalCursor from '../components/landing/MusicalCursor';
 import LandingNav from '../components/landing/LandingNav';
 import HeroSection from '../components/landing/HeroSection';
 import TickerMarquee from '../components/landing/TickerMarquee';
+import HowItWorksSection from '../components/landing/HowItWorksSection';
 import CapabilitiesSection from '../components/landing/CapabilitiesSection';
 import ProducerSection from '../components/landing/ProducerSection';
 import GenreGallerySection from '../components/landing/GenreGallerySection';
@@ -19,7 +20,7 @@ import LandingFooter from '../components/landing/LandingFooter';
  * LandingPage
  * High-performance Antigravity-style showcase page composed of modular sections.
  */
-export default function LandingPage({ onLaunch, spotifyStatus }) {
+export default function LandingPage({ onLaunch, onPrivacy, spotifyStatus }) {
   const isConnected = spotifyStatus?.connected;
   const displayName = spotifyStatus?.spotify_user?.display_name;
 
@@ -60,6 +61,7 @@ export default function LandingPage({ onLaunch, spotifyStatus }) {
       {/* Frosted Sticky Navigation Bar */}
       <LandingNav
         onLaunch={onLaunch}
+        onPrivacy={onPrivacy}
         isConnected={isConnected}
       />
 
@@ -73,6 +75,11 @@ export default function LandingPage({ onLaunch, spotifyStatus }) {
 
       {/* Continuous Ticker Marquee */}
       <TickerMarquee />
+
+      {/* How TuneFetch Works: 3-Step Lightning Workflow & Interactive Terminal Video Simulation */}
+      <HowItWorksSection
+        onLaunch={onLaunch}
+      />
 
       {/* Core Technical Capabilities */}
       <CapabilitiesSection />
@@ -102,7 +109,7 @@ export default function LandingPage({ onLaunch, spotifyStatus }) {
       />
 
       {/* Semantic Footer */}
-      <LandingFooter />
+      <LandingFooter onPrivacy={onPrivacy} />
     </div>
   );
 }

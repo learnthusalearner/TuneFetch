@@ -42,6 +42,8 @@ def main():
     pyinstaller_cmd_engine = [
         sys.executable, "-m", "PyInstaller",
         "--name", "TuneFetch",
+        "--noconfirm",
+        "--clean",
         "--onefile",
         "--version-file", "version_info.txt",
         "--exclude-module", "numpy",
@@ -49,25 +51,29 @@ def main():
         "--exclude-module", "scipy",
         "--exclude-module", "matplotlib",
         "--exclude-module", "IPython",
-        "--add-data", f"frontend_dist{separator}frontend_dist",
-        "--clean",
         "--distpath", str(dist_dir),
         str(backend_dir / "launcher.py")
     ]
     subprocess.run(pyinstaller_cmd_engine, cwd=backend_dir, check=True)
 
     print("\n[5/5] Running PyInstaller for TuneFetch Setup Wizard...")
-    pyinstaller_cmd_installer = [
-        sys.executable, "-m", "PyInstaller",
-        "--name", "TuneFetch_Setup",
+    setup_cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
         "--onefile",
         "--windowed",
-        "--version-file", "version_info.txt",
-        "--clean",
-        "--distpath", str(dist_dir),
-        str(backend_dir / "installer_wizard.py")
+        "--name",
+        "TuneFetch_Setup",
+        "--distpath",
+        str(dist_dir),
+        "--add-binary",
+        f"{dist_dir / 'TuneFetch.exe'};.",
+        str(backend_dir / "installer_wizard.py"),
     ]
-    subprocess.run(pyinstaller_cmd_installer, cwd=backend_dir, check=True)
+    subprocess.run(setup_cmd, cwd=backend_dir, check=True)
 
     # Copy executables to backend/static so FastAPI serves them and Git commits them
     static_dir = backend_dir / "static"

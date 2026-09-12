@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  AlertCircle, RefreshCw, LogOut, Laptop, DownloadCloud,
-  FileCode, ArrowRight, CheckCircle2, FolderDown, Loader2, ExternalLink
+  AlertCircle, RefreshCw, LogOut, DownloadCloud,
+  FileCode, ArrowRight, CheckCircle2, FolderDown, Loader2
 } from 'lucide-react';
 
 import Navbar from '../components/layout/Navbar';
@@ -15,7 +15,7 @@ import PlaylistTracksModal from '../components/Spotify/PlaylistTracksModal';
 import BatchProgressCard from '../components/Spotify/BatchProgressCard';
 import ProgressCard from '../components/ProgressCard';
 
-import { api, setStoredUserId, isLocalhost } from '../services/api';
+import { api, setStoredUserId } from '../services/api';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDownloadTask } from '../hooks/useDownloadTask';
 import { STORAGE_KEYS } from '../constants';
@@ -619,161 +619,12 @@ export default function DashboardPage({ onGoHome }) {
                   </span>
                 </div>
               ) : !spotifyStatus.connected ? (
-                isLocalhost ? (
-                  <motion.div
-                    className="glass-panel"
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    style={{
-                      padding: '36px 30px',
-                      borderRadius: '20px',
-                      background: 'linear-gradient(135deg, rgba(29, 185, 84, 0.08) 0%, rgba(15, 23, 42, 0.75) 100%)',
-                      border: '1px solid rgba(29, 185, 84, 0.3)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '26px',
-                      textAlign: 'left',
-                      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
-                    }}
-                  >
-                    {/* Status Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
-                          <Laptop size={24} />
-                        </div>
-                        <div>
-                          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#fff' }}>
-                            TuneFetch Local Downloader Engine Online
-                          </h2>
-                          <span style={{ fontSize: '13px', color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                            Listening on 127.0.0.1:8000 • Ready for full-speed downloads
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={{
-                        padding: '8px 16px',
-                        borderRadius: '20px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        fontSize: '12.5px',
-                        color: 'var(--text-secondary)'
-                      }}>
-                        📁 Destination: <strong style={{ color: '#fff' }}>Downloads/Thanks for downloading</strong>
-                      </div>
-                    </div>
-
-                    {/* Two-step workflow */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
-                      {/* Step 1 */}
-                      <div style={{
-                        padding: '22px',
-                        borderRadius: '14px',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '14px',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div>
-                          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, color: '#1DB954' }}>
-                            STEP 1 • CLOUD AUTH &amp; PLAYLIST SELECTION
-                          </span>
-                          <h3 style={{ margin: '8px 0', fontSize: '17px', fontWeight: 700, color: '#fff' }}>
-                            Select Playlist on Web App
-                          </h3>
-                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                            To protect your Spotify credentials, authentication &amp; PostgreSQL song link resolution happen securely on our Cloud Web App.
-                          </p>
-                        </div>
-                        <a
-                          href="https://tune-fetch-tan.vercel.app/dashboard"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            padding: '12px 20px',
-                            borderRadius: '10px',
-                            background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
-                            color: '#fff',
-                            fontSize: '13.5px',
-                            fontWeight: 700,
-                            textDecoration: 'none',
-                            boxShadow: '0 4px 16px rgba(29, 185, 84, 0.35)'
-                          }}
-                        >
-                          <span>Open Cloud Web Extractor</span>
-                          <ExternalLink size={16} />
-                        </a>
-                      </div>
-
-                      {/* Step 2 */}
-                      <div style={{
-                        padding: '22px',
-                        borderRadius: '14px',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '14px',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div>
-                          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, color: '#60a5fa' }}>
-                            STEP 2 • LOCAL HIGH-SPEED DOWNLOAD
-                          </span>
-                          <h3 style={{ margin: '8px 0', fontSize: '17px', fontWeight: 700, color: '#fff' }}>
-                            Download Songs to Your PC
-                          </h3>
-                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                            On the website, click <strong>"Download on My PC"</strong> to transfer songs here automatically, or enter your 4-digit code (e.g. <code>TF-4982</code>) below:
-                          </p>
-                        </div>
-
-                        <form onSubmit={handleImportSessionSubmit} style={{ display: 'flex', gap: '8px' }}>
-                          <input
-                            type="text"
-                            value={sessionInput}
-                            onChange={(e) => setSessionInput(e.target.value)}
-                            placeholder="Enter TF-XXXX code..."
-                            style={{
-                              flex: 1,
-                              padding: '10px 14px',
-                              borderRadius: '8px',
-                              background: 'rgba(255, 255, 255, 0.06)',
-                              border: '1px solid var(--border-glass)',
-                              color: '#fff',
-                              fontSize: '13px',
-                              outline: 'none'
-                            }}
-                          />
-                          <button
-                            type="submit"
-                            disabled={isImportingSession || !sessionInput.trim()}
-                            className="btn-download-action"
-                            style={{ padding: '10px 18px', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap' }}
-                          >
-                            {isImportingSession ? <Loader2 size={15} className="spinner" /> : <ArrowRight size={15} />}
-                            <span>Download</span>
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <SpotifyConnect
-                    spotifyStatus={spotifyStatus}
-                    onConnect={handleSpotifyConnect}
-                    onDisconnect={handleSpotifyDisconnect}
-                    isLoading={isLoadingPlaylists}
-                  />
-                )
+                <SpotifyConnect
+                  spotifyStatus={spotifyStatus}
+                  onConnect={handleSpotifyConnect}
+                  onDisconnect={handleSpotifyDisconnect}
+                  isLoading={isLoadingPlaylists}
+                />
               ) : (
                 <>
                   {/* Playlists header bar */}

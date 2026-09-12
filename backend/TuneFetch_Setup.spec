@@ -4,7 +4,7 @@
 a = Analysis(
     ['C:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/installer_wizard.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('C:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/dist/TuneFetch.exe', '.')],
     datas=[],
     hiddenimports=[],
     hookspath=[],
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version_info.txt',
 )

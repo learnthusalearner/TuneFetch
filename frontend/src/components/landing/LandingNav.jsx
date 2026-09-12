@@ -7,7 +7,11 @@ import { api } from '../../services/api';
  * LandingNav
  * Frosted top navigation bar with brand icon, status radar, and action buttons.
  */
-export default function LandingNav({ onLaunch, isConnected }) {
+export default function LandingNav({ onLaunch, onPrivacy, isConnected }) {
+  const scrollToHowItWorks = () => {
+    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
     <nav className="landing-nav" aria-label="Main Navigation">
       <div className="landing-nav-logo" onClick={onLaunch} style={{ cursor: 'pointer' }}>
@@ -23,24 +27,18 @@ export default function LandingNav({ onLaunch, isConnected }) {
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green)' }}>Engine Online</span>
         </div>
 
-        <a
-          href={api.getInstallerDownloadUrl()}
-          download="TuneFetch_Setup.exe"
-          className="landing-nav-link"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#1DB954',
-            fontWeight: 700,
-            textDecoration: 'none'
-          }}
-          title="Download TuneFetch Desktop Installer (.exe)"
-        >
-          <span>Download App (.exe)</span>
-        </a>
+        <button className="landing-nav-link" onClick={scrollToHowItWorks}>
+          How It Works
+        </button>
 
-        <button className="landing-nav-link" onClick={onLaunch}>Dashboard Workspace</button>
+        <button className="landing-nav-link" onClick={onPrivacy}>
+          Privacy Policy
+        </button>
+
+        <button className="landing-nav-link" onClick={onLaunch}>
+          Dashboard Workspace
+        </button>
+
         <motion.button
           className="btn-primary"
           onClick={onLaunch}
