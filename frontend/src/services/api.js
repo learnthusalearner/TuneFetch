@@ -459,7 +459,10 @@ export const api = {
    * Returns direct download URL for the compiled TuneFetch_Setup.exe installer
    */
   getInstallerDownloadUrl() {
-    return `${API_BASE}/download-installer`;
+    if (BACKEND_URL) {
+      return `${BACKEND_URL}/api/download-installer`;
+    }
+    return `${CLOUD_BACKEND_URL}/api/download-installer`;
   }
 };
 

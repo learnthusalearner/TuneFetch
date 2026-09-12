@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Music, ArrowRight, CheckCircle, Zap, Layers, Radio } from 'lucide-react';
 import StarfieldBg from '../layout/StarfieldBg';
+import { api } from '../../services/api';
 
 // Direct 100% reliable PNG imports
 import image1Png from '../../assets/image.png';
@@ -68,7 +69,7 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
           style={{ flexWrap: 'wrap', gap: '14px', justifyContent: 'center' }}
         >
           <a
-            href="/api/download-installer"
+            href={api.getInstallerDownloadUrl()}
             download="TuneFetch_Setup.exe"
             style={{
               display: 'inline-flex',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Music } from 'lucide-react';
+import { api } from '../../services/api';
 
 /**
  * LandingNav
@@ -23,7 +24,7 @@ export default function LandingNav({ onLaunch, isConnected }) {
         </div>
 
         <a
-          href="/api/download-installer"
+          href={api.getInstallerDownloadUrl()}
           download="TuneFetch_Setup.exe"
           className="landing-nav-link"
           style={{
