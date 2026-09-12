@@ -298,11 +298,11 @@ def configure_urllib_network(use_proxy: bool = False, custom_cookies: Optional[h
 # Initialize standard opener without forcing proxy globally
 configure_urllib_network(use_proxy=False)
 
-CLIENT_FALLBACK_ORDER = ["TV_SIMPLY", "WEB_SAFARI", "MWEB", "ANDROID_VR", "VISION_OS", "IOS", "WEB"]
+CLIENT_FALLBACK_ORDER = ["MWEB", "VISION_OS", "ANDROID_VR", "WEB", "IOS"]
 
 def build_pytubefix_instance(
     url: str,
-    client: str = "TV_SIMPLY",
+    client: str = "MWEB",
     on_progress_callback=None,
     on_complete_callback=None
 ) -> YouTube:
@@ -679,29 +679,77 @@ class DownloadManager:
             if not active_cookies:
                 active_cookies = get_cookie_jar()
 
-            # 1. Fetch YouTube instance with client fallback
-            yt, audio_stream = fetch_youtube_with_fallback(
-                target_url,
-                on_progress_callback=on_progress,
-                custom_cookies=active_cookies
-            )
+            # 1 & 2. Fetch and download audio stream with multi-client resilience
+            download_success = False
+            last_err = None
+            video_title = custom_title or "Audio"
+            video_artist = custom_artist or ""
+            thumbnail = ""
 
-            video_title = custom_title or yt.title or "Audio"
-            video_artist = custom_artist or yt.author or ""
-            thumbnail = yt.thumbnail_url or ""
+            proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
+            for use_proxy in proxy_attempts:
+                configure_urllib_network(use_proxy=use_proxy, custom_cookies=active_cookies)
+                for client_name in CLIENT_FALLBACK_ORDER:
+                    try:
+                        yt = build_pytubefix_instance(
+                            url=target_url,
+                            client=client_name,
+                            on_progress_callback=on_progress
+                        )
+                        video_title = custom_title or yt.title or "Audio"
+                        video_artist = custom_artist or yt.author or ""
+                        thumbnail = yt.thumbnail_url or ""
 
-            # 2. Download raw audio stream to temporary file in DOWNLOADS_DIR
-            stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
-            temp_filename = f"{task_id}_raw.{stream_ext}"
-            
-            audio_stream.download(
-                output_path=DOWNLOADS_DIR,
-                filename=temp_filename
-            )
+                        all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+                        audio_stream = None
+                        non_sabr = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+                        if non_sabr:
+                            audio_stream = non_sabr[0]
+                        elif yt.streams.get_audio_only():
+                            audio_stream = yt.streams.get_audio_only()
+                        elif all_audio and len(all_audio) > 0:
+                            audio_stream = all_audio.first()
 
-            raw_temp_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
-            if not os.path.exists(raw_temp_filepath):
-                raise FileNotFoundError(f"Raw audio stream file was not created at: {raw_temp_filepath}")
+                        if not audio_stream:
+                            continue
+
+                        stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
+                        temp_filename = f"{task_id}_raw.{stream_ext}"
+                        candidate_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
+
+                        if os.path.exists(candidate_filepath):
+                            try:
+                                os.remove(candidate_filepath)
+                            except Exception:
+                                pass
+
+                        audio_stream.download(
+                            output_path=DOWNLOADS_DIR,
+                            filename=temp_filename
+                        )
+
+                        if os.path.exists(candidate_filepath) and os.path.getsize(candidate_filepath) > 1024:
+                            raw_temp_filepath = candidate_filepath
+                            download_success = True
+                            break
+                        else:
+                            if os.path.exists(candidate_filepath):
+                                try:
+                                    os.remove(candidate_filepath)
+                                except Exception:
+                                    pass
+                            logger.warning(f"Client '{client_name}' stream download was empty or corrupted (<1KB).")
+                    except Exception as client_err:
+                        last_err = client_err
+                        logger.warning(f"Download with client '{client_name}' (proxy={use_proxy}) failed: {client_err}")
+                        if use_proxy and "407" in str(client_err):
+                            break
+
+                if download_success:
+                    break
+
+            if not download_success or not raw_temp_filepath or not os.path.exists(raw_temp_filepath):
+                raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
             # 3. Audio conversion / standardization to MP3 via FFmpeg
             ffmpeg_exe = get_ffmpeg_path()
