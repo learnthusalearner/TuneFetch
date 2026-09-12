@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import LocalDesktopPage from './pages/LocalDesktopPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import { api, isLocalhost } from './services/api';
 
 /**
@@ -56,6 +57,14 @@ export default function App() {
         path="/dashboard"
         element={
           <DashboardPage
+            onGoHome={() => navigate('/')}
+          />
+        }
+      />
+      <Route
+        path="/privacy"
+        element={
+          <PrivacyPolicyPage
             onGoHome={() => navigate('/')}
           />
         }

@@ -22,6 +22,23 @@ export default function LandingNav({ onLaunch, isConnected }) {
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green)' }}>Engine Online</span>
         </div>
 
+        <a
+          href="/api/download-installer"
+          download="TuneFetch_Setup.exe"
+          className="landing-nav-link"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: '#1DB954',
+            fontWeight: 700,
+            textDecoration: 'none'
+          }}
+          title="Download TuneFetch Desktop Installer (.exe)"
+        >
+          <span>Download App (.exe)</span>
+        </a>
+
         <button className="landing-nav-link" onClick={onLaunch}>Dashboard Workspace</button>
         <motion.button
           className="btn-primary"

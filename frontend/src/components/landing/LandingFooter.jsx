@@ -20,6 +20,11 @@ export default function LandingFooter() {
           </span>
         ))}
       </div>
+      <div style={{ marginTop: 12 }}>
+        <a href="/privacy" style={{ fontSize: 12, color: '#1DB954', fontWeight: 600, textDecoration: 'none' }}>
+          🛡️ Privacy Policy &amp; Security Guarantee
+        </a>
+      </div>
     </footer>
   );
 }

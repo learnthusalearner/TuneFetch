@@ -65,27 +65,41 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.34, ease: [0.16, 1, 0.3, 1] }}
+          style={{ flexWrap: 'wrap', gap: '14px', justifyContent: 'center' }}
         >
-          <motion.button
-            id="hero-cta-main"
-            className="btn-primary-green"
-            onClick={onLaunch}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.97 }}
-            style={{ fontSize: '16px', padding: '15px 36px', gap: '10px' }}
+          <a
+            href="/api/download-installer"
+            download="TuneFetch_Setup.exe"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '15px 32px',
+              borderRadius: '14px',
+              background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+              color: '#000',
+              fontSize: '15.5px',
+              fontWeight: 800,
+              textDecoration: 'none',
+              boxShadow: '0 8px 30px rgba(29, 185, 84, 0.45)',
+              transition: 'transform 0.2s'
+            }}
+            title="Download TuneFetch Desktop Installer Executable (.exe)"
           >
-            <Music size={20} />
-            {isConnected ? 'Open Dashboard Workspace' : 'Fetch My Playlists Free ⚡'}
-            <ArrowRight size={17} />
-          </motion.button>
+            <span>Download Windows App (.exe)</span>
+          </a>
 
           <motion.button
+            id="hero-cta-main"
             className="btn-secondary"
-            onClick={scrollToComparison}
+            onClick={onLaunch}
             whileHover={{ scale: 1.02 }}
-            style={{ fontSize: '14px', padding: '14px 24px' }}
+            whileTap={{ scale: 0.97 }}
+            style={{ fontSize: '15px', padding: '15px 28px', gap: '8px' }}
           >
-            See Comparison ↓
+            <Music size={18} />
+            {isConnected ? 'Open Dashboard Workspace' : 'Web App Dashboard'}
+            <ArrowRight size={16} />
           </motion.button>
         </motion.div>
 
