@@ -93,7 +93,7 @@ class TuneFetchInstaller(tk.Tk):
                  "• Real-Time Monitor:   Live percentage %, speed (MB/s), and ETA countdown\n"
                  "• Session DB Storage:   Encrypted 24h cloud database session tokens for sync\n"
                  "• Privacy Guarantee:   100% Open-Source. Zero user passwords or credentials stored.",
-            font=('Segoe UI', 9.5), bg='#151d2a', fg='#e2e8f0', justify='left'
+            font=('Segoe UI', 10), bg='#151d2a', fg='#e2e8f0', justify='left'
         )
         info_lbl.pack(anchor='w')
 
@@ -102,7 +102,7 @@ class TuneFetchInstaller(tk.Tk):
             text="Click Next to review the Open-Source License & Privacy Guarantee and proceed with installation.",
             wraplength=580,
             justify='left',
-            font=('Segoe UI', 9.5)
+            font=('Segoe UI', 10)
         )
         desc.pack(anchor='w', pady=(0, 20))
 

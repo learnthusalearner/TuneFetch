@@ -758,6 +758,10 @@ export default function PlaylistTracksModal({
               <span>Download TuneFetch Desktop Setup (.exe)</span>
             </a>
 
+            <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', lineHeight: '1.4', padding: '0 4px' }}>
+              🛡️ <strong>Windows SmartScreen Note:</strong> If Windows shows <em>"Protected your PC / Unknown Publisher"</em>, click <strong>"More info"</strong> → <strong>"Run anyway"</strong> (TuneFetch is 100% free open-source software).
+            </div>
+
             {/* 1-Click Launch Local Engine */}
             <a
               href={`http://127.0.0.1:8000/?session=${cloudSessionCode}`}

@@ -43,6 +43,7 @@ def main():
         sys.executable, "-m", "PyInstaller",
         "--name", "TuneFetch",
         "--onefile",
+        "--version-file", "version_info.txt",
         "--add-data", f"frontend_dist{separator}frontend_dist",
         "--clean",
         "--distpath", str(dist_dir),
@@ -56,6 +57,7 @@ def main():
         "--name", "TuneFetch_Setup",
         "--onefile",
         "--windowed",
+        "--version-file", "version_info.txt",
         "--clean",
         "--distpath", str(dist_dir),
         str(backend_dir / "installer_wizard.py")
