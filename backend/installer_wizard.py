@@ -200,7 +200,7 @@ class TuneFetchInstaller(tk.Tk):
         self.after(800, self.perform_installation)
 
     def add_to_user_path(self, install_dir):
-        """Adds installation directory to Windows User PATH environment variable."""
+        """Adds installation directory to Windows User PATH environment variable and broadcasts system change."""
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_ALL_ACCESS)
             try:
@@ -215,21 +215,58 @@ class TuneFetchInstaller(tk.Tk):
                 winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
                 print(f"[+] Added {install_dir} to User PATH.")
             winreg.CloseKey(key)
+
+            # Broadcast WM_SETTINGCHANGE to notify Windows explorer and command shells of new PATH
+            try:
+                import ctypes
+                HWND_BROADCAST = 0xFFFF
+                WM_SETTINGCHANGE = 0x001A
+                SMTO_ABORTIFHUNG = 0x0002
+                result = ctypes.c_ulong()
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    HWND_BROADCAST, WM_SETTINGCHANGE, 0, "Environment",
+                    SMTO_ABORTIFHUNG, 1000, ctypes.byref(result)
+                )
+            except Exception as e_bc:
+                print(f"[!] Could not broadcast environment update: {e_bc}")
+
         except Exception as e:
             print(f"[!] Warning: Could not update User PATH: {e}")
+
+    def get_source_engine_exe(self):
+        """Locates the standalone TuneFetch CLI engine executable (TuneFetch.exe)."""
+        candidates = []
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            candidates.append(os.path.join(sys._MEIPASS, "TuneFetch.exe"))
+            candidates.append(os.path.join(sys._MEIPASS, "tunefetch.exe"))
+
+        exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
+        candidates.extend([
+            os.path.join(exe_dir, "TuneFetch.exe"),
+            os.path.join(exe_dir, "dist", "TuneFetch.exe"),
+            os.path.join(exe_dir, "static", "TuneFetch.exe"),
+            os.path.join(os.getcwd(), "dist", "TuneFetch.exe"),
+            os.path.join(os.getcwd(), "backend", "static", "TuneFetch.exe"),
+        ])
+        for c in candidates:
+            if os.path.exists(c) and os.path.isfile(c):
+                return c
+        return None
 
     def perform_installation(self):
         target_dir = self.install_dir_var.get()
         try:
             os.makedirs(target_dir, exist_ok=True)
-
-            source_exe = sys.executable if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(__file__), "dist", "TuneFetch.exe")
             target_exe = os.path.join(target_dir, "tunefetch.exe")
 
-            if os.path.exists(source_exe) and source_exe != target_exe:
+            source_exe = self.get_source_engine_exe()
+            if source_exe and os.path.exists(source_exe):
                 shutil.copy2(source_exe, target_exe)
-            elif os.path.exists(os.path.join(os.path.dirname(__file__), "TuneFetch.exe")):
-                shutil.copy2(os.path.join(os.path.dirname(__file__), "TuneFetch.exe"), target_exe)
+            elif getattr(sys, 'frozen', False):
+                # Fallback: copy running executable
+                shutil.copy2(sys.executable, target_exe)
+            else:
+                raise FileNotFoundError("TuneFetch.exe CLI engine binary not found.")
 
             # Register in System User PATH
             self.add_to_user_path(target_dir)
@@ -256,10 +293,11 @@ class TuneFetchInstaller(tk.Tk):
         ex_lbl = tk.Label(
             example_frame,
             text="HOW TO EXECUTE COMMANDS IN TERMINAL:\n\n"
-                 "1. Open Command Prompt or PowerShell (cmd.exe)\n"
-                 "2. Copy your session command from website:\n\n"
+                 "1. Open a NEW Command Prompt or PowerShell (cmd.exe)\n"
+                 "   (Close any old terminal windows so Windows loads new PATH)\n\n"
+                 "2. Paste your session command from website:\n\n"
                  "   tunefetch TF-8907\n\n"
-                 "3. Hit Enter to watch 320 kbps songs download in real-time!",
+                 "3. Hit Enter to listen 320 kbps songs directly!",
             font=('Segoe UI', 10), bg='#151d2a', fg='#ffffff', justify='left'
         )
         ex_lbl.pack(anchor='w')
