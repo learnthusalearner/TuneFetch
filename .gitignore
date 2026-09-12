@@ -26,8 +26,11 @@ backend/downloads/*
 frontend/dist/
 frontend/dist-ssr/
 *.local
+# Environment & credentials
 .env
 .env.*.local
+*cookies*.txt
+cookies.txt
 
 # IDE & OS files
 .DS_Store

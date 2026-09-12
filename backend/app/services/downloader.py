@@ -92,65 +92,186 @@ def _background_gc_loop():
 gc_thread = threading.Thread(target=_background_gc_loop, daemon=True, name="TuneFetch-GC")
 gc_thread.start()
 
-def get_cookie_file() -> Optional[str]:
+def _parse_cookies_into_jar(raw_content: str) -> http.cookiejar.MozillaCookieJar:
     """
-    Locates or initializes a Netscape cookies.txt file for YouTube authentication.
-    Supports:
-    1. YOUTUBE_COOKIE_FILE / COOKIE_FILE env var (path to file)
-    2. YOUTUBE_COOKIES / COOKIES_TXT env var (raw text content)
-    3. YOUTUBE_COOKIES_BASE64 env var (base64-encoded text content)
-    4. Existing cookies.txt file in workspace root or backend
+    Parses cookies from multiple formats:
+    - Netscape format (standard cookies.txt, with or without '# Netscape HTTP Cookie File' header)
+    - JSON array format (e.g. from Cookie-Editor extension)
+    - Header key=value format (e.g. raw Cookie header)
     """
-    for env_var in ("YOUTUBE_COOKIE_FILE", "COOKIE_FILE"):
-        fpath = os.getenv(env_var)
-        if fpath and os.path.isfile(fpath):
-            return fpath
+    import json
+    import tempfile
 
+    jar = http.cookiejar.MozillaCookieJar()
+    content = raw_content.strip()
+    if not content or len(content) < 10:
+        return jar
+
+    # Format 1: JSON array (Cookie-Editor format)
+    if content.startswith("[") and content.endswith("]"):
+        try:
+            items = json.loads(content)
+            for item in items:
+                domain = item.get("domain", ".youtube.com")
+                name = item.get("name", "")
+                value = item.get("value", "")
+                path = item.get("path", "/")
+                secure = bool(item.get("secure", True))
+                expires = int(item.get("expirationDate", time.time() + 86400 * 365))
+                if name:
+                    c = http.cookiejar.Cookie(
+                        version=0, name=name, value=value,
+                        port=None, port_specified=False,
+                        domain=domain, domain_specified=True, domain_initial_dot=domain.startswith("."),
+                        path=path, path_specified=True,
+                        secure=secure, expires=expires,
+                        discard=False, comment=None, comment_url=None, rest={}, rfc2109=False
+                    )
+                    jar.set_cookie(c)
+            if len(list(jar)) > 0:
+                return jar
+        except Exception:
+            pass
+
+    # Format 2: Netscape format (with or without standard header)
+    netscape_lines = []
+    has_header = False
+    for line in content.splitlines():
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+        if "netscape" in line_clean.lower() or "http cookie file" in line_clean.lower():
+            has_header = True
+            netscape_lines.append(line)
+        elif line_clean.startswith("#") and not line_clean.startswith("#HttpOnly_"):
+            netscape_lines.append(line)
+        else:
+            parts = line.split("\t") if "\t" in line else line.split()
+            if len(parts) >= 7:
+                netscape_lines.append("\t".join(parts[:7]))
+            elif len(parts) >= 6:
+                netscape_lines.append("\t".join(parts))
+
+    if not has_header:
+        netscape_lines.insert(0, "# Netscape HTTP Cookie File")
+
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as tf:
+            tf.write("\n".join(netscape_lines) + "\n")
+            temp_name = tf.name
+
+        temp_jar = http.cookiejar.MozillaCookieJar(temp_name)
+        temp_jar.load(ignore_discard=True, ignore_expires=True)
+        for cookie in temp_jar:
+            jar.set_cookie(cookie)
+    except Exception:
+        pass
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+
+    # Format 3: Header format (Cookie: name=val; name2=val2)
+    if len(list(jar)) == 0 and ("=" in content or ";" in content):
+        clean_header = content.replace("Cookie:", "").strip()
+        for part in clean_header.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, v = part.split("=", 1)
+                k, v = k.strip(), v.strip()
+                if k and v:
+                    c = http.cookiejar.Cookie(
+                        version=0, name=k, value=v,
+                        port=None, port_specified=False,
+                        domain=".youtube.com", domain_specified=True, domain_initial_dot=True,
+                        path="/", path_specified=True,
+                        secure=True, expires=int(time.time() + 86400 * 365),
+                        discard=False, comment=None, comment_url=None, rest={}, rfc2109=False
+                    )
+                    jar.set_cookie(c)
+
+    return jar
+
+def get_cookie_jar() -> Optional[http.cookiejar.MozillaCookieJar]:
+    """
+    Loads and normalizes YouTube cookies from all supported sources:
+    1. YOUTUBE_COOKIE_FILE / COOKIE_FILE env var (path to file)
+    2. YOUTUBE_COOKIES / COOKIES_TXT env var (raw text, netscape, or JSON content)
+    3. YOUTUBE_COOKIES_BASE64 env var (base64-encoded content)
+    4. Local cookies.txt files in backend, workspace root, downloads, or current dir
+    """
+    from app.core.config import BASE_DIR
+
+    # Check environment variable raw cookies
     raw_cookies = os.getenv("YOUTUBE_COOKIES") or os.getenv("COOKIES_TXT")
     if raw_cookies and len(raw_cookies.strip()) > 10:
-        target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
-        try:
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write(raw_cookies.strip())
-            return target_path
-        except Exception as e:
-            logger.warning(f"Failed writing YOUTUBE_COOKIES to file: {e}")
+        jar = _parse_cookies_into_jar(raw_cookies)
+        if len(list(jar)) > 0:
+            target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+            try:
+                jar.save(target_path, ignore_discard=True, ignore_expires=True)
+            except Exception:
+                pass
+            return jar
 
+    # Check environment variable base64 cookies
     b64_cookies = os.getenv("YOUTUBE_COOKIES_BASE64")
     if b64_cookies and len(b64_cookies.strip()) > 10:
-        target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
         try:
             import base64
             decoded = base64.b64decode(b64_cookies.strip()).decode("utf-8")
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write(decoded)
-            return target_path
+            jar = _parse_cookies_into_jar(decoded)
+            if len(list(jar)) > 0:
+                target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+                try:
+                    jar.save(target_path, ignore_discard=True, ignore_expires=True)
+                except Exception:
+                    pass
+                return jar
         except Exception as e:
-            logger.warning(f"Failed writing YOUTUBE_COOKIES_BASE64 to file: {e}")
+            logger.warning(f"Failed decoding YOUTUBE_COOKIES_BASE64: {e}")
 
-    from app.core.config import BASE_DIR
+    # Check file candidates
     candidates = [
-        os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt"),
+        os.getenv("YOUTUBE_COOKIE_FILE"),
+        os.getenv("COOKIE_FILE"),
         os.path.join(BASE_DIR, "cookies.txt"),
-        os.path.join(BASE_DIR, "backend", "cookies.txt"),
+        os.path.join(BASE_DIR.parent, "cookies.txt"),
         os.path.join(DOWNLOADS_DIR, "cookies.txt"),
+        os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt"),
+        os.path.join(os.getcwd(), "cookies.txt"),
+        os.path.join(os.getcwd(), "backend", "cookies.txt"),
     ]
+
     for candidate in candidates:
-        if os.path.isfile(candidate) and os.path.getsize(candidate) > 10:
-            return candidate
+        if candidate and os.path.isfile(candidate) and os.path.getsize(candidate) > 10:
+            try:
+                with open(candidate, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                jar = _parse_cookies_into_jar(content)
+                if len(list(jar)) > 0:
+                    logger.info(f"Loaded {len(list(jar))} cookies for YouTube authentication from {candidate}")
+                    target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+                    try:
+                        jar.save(target_path, ignore_discard=True, ignore_expires=True)
+                    except Exception:
+                        pass
+                    return jar
+            except Exception as e:
+                logger.warning(f"Failed reading cookie candidate {candidate}: {e}")
 
     return None
 
-def get_cookie_jar() -> Optional[http.cookiejar.MozillaCookieJar]:
-    """Loads Netscape cookies if available."""
-    cookie_file = get_cookie_file()
-    if cookie_file:
-        try:
-            cookie_jar = http.cookiejar.MozillaCookieJar(cookie_file)
-            cookie_jar.load(ignore_discard=True, ignore_expires=True)
-            return cookie_jar
-        except Exception as e:
-            logger.warning(f"Failed loading cookie file: {e}")
+def get_cookie_file() -> Optional[str]:
+    """Returns path to cached valid cookies.txt if available."""
+    jar = get_cookie_jar()
+    if jar and len(list(jar)) > 0:
+        target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
+        if os.path.isfile(target_path):
+            return target_path
     return None
 
 def configure_urllib_network(use_proxy: bool = False):
