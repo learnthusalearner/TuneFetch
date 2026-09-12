@@ -205,12 +205,14 @@ def fetch_youtube_with_fallback(
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
-    Prioritizes stable non-SABR direct audio streams (like MWEB / VISION_OS) for reliable downloads,
-    falling back to any valid audio stream if necessary.
+    Leverages built-in botGuard PO token generation when available to bypass bot detection.
+    Prioritizes stable non-SABR direct audio streams for reliable downloads.
     Returns (yt_instance, best_audio_stream).
     Raises RuntimeError if all clients fail.
     """
     last_err = None
+    po_token_cache = None
+
     for client_name in CLIENT_FALLBACK_ORDER:
         try:
             yt = build_pytubefix_instance(
@@ -219,9 +221,20 @@ def fetch_youtube_with_fallback(
                 on_progress_callback=on_progress_callback,
                 on_complete_callback=on_complete_callback
             )
+
+            # Auto-generate PO token via botGuard if not already generated
+            try:
+                if not po_token_cache:
+                    from pytubefix.botGuard.bot_guard import generate_po_token
+                    po_token_cache = generate_po_token(yt.video_id)
+                if po_token_cache:
+                    yt.po_token = po_token_cache
+            except Exception as pot_err:
+                logger.debug(f"Auto PO token generation skipped: {pot_err}")
+
             # Accessing title forces basic metadata extraction
             _ = yt.title
-            
+
             # First priority: non-SABR audio streams for maximum download stability
             all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
             non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
@@ -239,7 +252,7 @@ def fetch_youtube_with_fallback(
             last_err = err
             logger.debug(f"Pytubefix client '{client_name}' failed for '{url}': {err}")
 
-    raise RuntimeError(f"Could not extract audio stream across all clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
+    raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
 class DownloadManager:
     @staticmethod
@@ -623,7 +636,7 @@ class DownloadManager:
             err_msg = str(e)
             if "bot" in err_msg.lower() or "429" in err_msg:
                 err_msg = (
-                    "YouTube requested bot verification or rate-limited this request. "
+                    f"YouTube requested bot verification or rate-limited this request ({err_msg}). "
                     "Configuring YOUTUBE_COOKIES or ROTATING_PROXY_URL will automatically bypass this limit."
                 )
 
