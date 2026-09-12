@@ -274,13 +274,14 @@ def get_cookie_file() -> Optional[str]:
             return target_path
     return None
 
-def configure_urllib_network(use_proxy: bool = False):
+def configure_urllib_network(use_proxy: bool = False, custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None):
     """
     Configures urllib opener dynamically.
     Avoids permanently hijacking urllib when a proxy returns 407 authentication errors.
+    Prioritizes user session custom_cookies if provided.
     """
     handlers = []
-    cookie_jar = get_cookie_jar()
+    cookie_jar = custom_cookies or get_cookie_jar()
     if cookie_jar:
         handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
 
@@ -335,13 +336,15 @@ def build_pytubefix_instance(
 def fetch_youtube_with_fallback(
     url: str,
     on_progress_callback=None,
-    on_complete_callback=None
+    on_complete_callback=None,
+    custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None
 ) -> Tuple[YouTube, Any]:
     """
     Tries multiple client profiles in sequence until a valid audio stream is found.
     Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully to direct.
     Leverages built-in botGuard PO token generation when available to bypass bot detection.
     Prioritizes stable non-SABR direct audio streams for reliable downloads.
+    Accepts user session custom_cookies for temporary authenticated download execution.
     Returns (yt_instance, best_audio_stream).
     Raises RuntimeError if all clients fail.
     """
@@ -352,7 +355,7 @@ def fetch_youtube_with_fallback(
     proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
 
     for use_proxy in proxy_attempts:
-        configure_urllib_network(use_proxy=use_proxy)
+        configure_urllib_network(use_proxy=use_proxy, custom_cookies=custom_cookies)
         for client_name in CLIENT_FALLBACK_ORDER:
             try:
                 # Pre-generate PO token via botGuard for this video if needed
@@ -548,9 +551,13 @@ class DownloadManager:
         custom_title: Optional[str] = None,
         custom_artist: Optional[str] = None,
         custom_thumbnail: Optional[str] = None,
+        user_id: Optional[str] = None,
+        custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None,
+        is_single_download: bool = False
     ) -> str:
         """
         Initializes an asynchronous download task queued in the bounded thread pool.
+        Supports user-specific ephemeral cookies with automated post-download deletion.
         """
         task_id = str(uuid.uuid4())
 
@@ -570,13 +577,16 @@ class DownloadManager:
                 "filepath": None,
                 "filesize": 0,
                 "error": None,
-                "created_at": time.time()
+                "created_at": time.time(),
+                "user_id": user_id,
+                "custom_cookies": custom_cookies,
+                "is_single_download": is_single_download
             }
 
         # Submit task to the bounded worker pool
         executor.submit(
             DownloadManager._run_download,
-            task_id, url, format_type, custom_title, custom_artist
+            task_id, url, format_type, custom_title, custom_artist, custom_cookies, user_id
         )
 
         return task_id
@@ -587,7 +597,9 @@ class DownloadManager:
         url: str,
         format_type: str,
         custom_title: Optional[str],
-        custom_artist: Optional[str]
+        custom_artist: Optional[str],
+        custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None,
+        user_id: Optional[str] = None
     ):
         target_url = url
         if is_spotify_url(url):
@@ -684,10 +696,20 @@ class DownloadManager:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "downloading"
 
+            # Resolve active cookies: explicit custom_cookies, or from UserCookieStore for user_id
+            active_cookies = custom_cookies
+            if not active_cookies and user_id:
+                try:
+                    from app.services.user_cookie_store import UserCookieStore
+                    active_cookies = UserCookieStore.get_cookies(user_id)
+                except Exception:
+                    pass
+
             # 1. Fetch YouTube instance with client fallback
             yt, audio_stream = fetch_youtube_with_fallback(
                 target_url,
-                on_progress_callback=on_progress
+                on_progress_callback=on_progress,
+                custom_cookies=active_cookies
             )
 
             video_title = custom_title or yt.title or "Audio"
@@ -818,11 +840,18 @@ class DownloadManager:
     def delete_task_file_safely(task_id: str, delay_seconds: float = 2.0):
         """
         Deletes the downloaded physical file immediately after client delivery,
-        ensuring zero persistent server disk accumulation.
+        ensuring zero persistent server disk accumulation, and purges user cookies
+        if this was a single download task.
         """
         def _deferred_delete():
             time.sleep(delay_seconds)
             try:
+                user_id_to_clean = None
+                with tasks_lock:
+                    task = tasks.get(task_id)
+                    if task and task.get("is_single_download") and task.get("user_id"):
+                        user_id_to_clean = task.get("user_id")
+
                 filepath = DownloadManager.get_task_filepath(task_id)
                 if filepath and os.path.exists(filepath):
                     os.remove(filepath)
@@ -833,6 +862,14 @@ class DownloadManager:
                     try:
                         if os.path.exists(f):
                             os.remove(f)
+                    except Exception:
+                        pass
+
+                if user_id_to_clean:
+                    try:
+                        from app.services.user_cookie_store import UserCookieStore
+                        UserCookieStore.delete_cookies(user_id_to_clean)
+                        logger.info(f"[AutoClean] Purged temporary cookies for user {user_id_to_clean} following single file delivery.")
                     except Exception:
                         pass
             except Exception as e:

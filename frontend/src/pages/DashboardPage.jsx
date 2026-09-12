@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut, Cookie } from 'lucide-react';
 
 import Navbar from '../components/layout/Navbar';
 import { ToastContainer } from '../components/ui/Toast';
@@ -11,6 +11,7 @@ import SpotifyPlaylists from '../components/Spotify/SpotifyPlaylists';
 import PlaylistTracksModal from '../components/Spotify/PlaylistTracksModal';
 import BatchProgressCard from '../components/Spotify/BatchProgressCard';
 import ProgressCard from '../components/ProgressCard';
+import CookieModal from '../components/Spotify/CookieModal';
 
 import { api } from '../services/api';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -42,6 +43,10 @@ export default function DashboardPage({ onGoHome }) {
   const [isStartingBatchDownload, setIsStartingBatchDownload] = useState(false);
   const [downloadingTrackId, setDownloadingTrackId] = useState(null);
   const [playingTrack, setPlayingTrack] = useState(null);
+
+  /* ── Ephemeral YouTube Cookie State ────────────────────────── */
+  const [showCookieModal, setShowCookieModal] = useState(false);
+  const [cookieStatus, setCookieStatus] = useState({ has_cookies: false, count: 0 });
 
   /* ── Batch Job (persisted) ─────────────────────────────────── */
   const [activeJobId, setActiveJobId] = useState(() => {
@@ -84,6 +89,7 @@ export default function DashboardPage({ onGoHome }) {
       },
       ...prev.filter(h => h.file_id !== task.file_id),
     ]);
+    api.getUserCookieStatus().then(setCookieStatus).catch(() => {});
   }, [setHistory]);
 
   const { activeTask, activeTrackIndex, error: taskError, startDownload, resetTask, setError: setTaskError } =
@@ -104,6 +110,7 @@ export default function DashboardPage({ onGoHome }) {
       if (params.get('spotify') === 'connected') {
         pushToast('Spotify account connected successfully!', 'success');
         window.history.replaceState({}, document.title, window.location.pathname);
+        setShowCookieModal(true);
       } else if (params.get('spotify_error')) {
         let rawErr = params.get('spotify_error') || '';
         try { rawErr = decodeURIComponent(rawErr.replace(/\+/g, ' ')); } catch {}
@@ -119,6 +126,7 @@ export default function DashboardPage({ onGoHome }) {
     try {
       const status = await api.getSpotifyStatus();
       setSpotifyStatus(status);
+      api.getUserCookieStatus().then(setCookieStatus).catch(() => {});
       if (status.connected) {
         fetchPlaylists();
         try {
@@ -174,7 +182,13 @@ export default function DashboardPage({ onGoHome }) {
           });
         }
         const s = (job.status || '').toLowerCase();
-        if (s === 'completed' || s === 'failed') clearInterval(iv);
+        if (s === 'completed' || s === 'failed') {
+          clearInterval(iv);
+          api.getUserCookieStatus().then(setCookieStatus).catch(() => {});
+          if (s === 'completed') {
+            pushToast('All playlist songs downloaded! Temporary cookies safely deleted from server.', 'info');
+          }
+        }
       } catch {}
     }, 1500);
     return () => { mounted = false; clearInterval(iv); };
@@ -392,7 +406,30 @@ export default function DashboardPage({ onGoHome }) {
                         </span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowCookieModal(true)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          borderRadius: '20px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: cookieStatus.has_cookies ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                          border: cookieStatus.has_cookies ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                          color: cookieStatus.has_cookies ? '#6ee7b7' : 'var(--text-secondary)',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Click to configure or view temporary YouTube verification cookies"
+                      >
+                        <Cookie size={13} />
+                        <span>{cookieStatus.has_cookies ? `Cookies Active (${cookieStatus.count})` : 'Paste Cookies (Recommended)'}</span>
+                      </button>
+
                       <button
                         className="icon-btn"
                         onClick={fetchPlaylists}
@@ -439,6 +476,17 @@ export default function DashboardPage({ onGoHome }) {
             downloadingTrackId={downloadingTrackId}
           />
         )}
+
+        {/* Ephemeral YouTube Cookie Verification Modal */}
+        <CookieModal
+          isOpen={showCookieModal}
+          onClose={() => setShowCookieModal(false)}
+          existingCookieCount={cookieStatus.count}
+          onSuccess={(count) => {
+            setCookieStatus({ has_cookies: true, count });
+            pushToast(`Loaded ${count} verification cookies! They will be wiped after your download.`, 'success');
+          }}
+        />
 
         {/* Audio Player */}
         <AnimatePresence>

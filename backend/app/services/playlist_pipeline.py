@@ -102,6 +102,7 @@ class PlaylistPipeline:
             if not job:
                 return
 
+            user_id = job.user_id if job else None
             processed = 0
             successful = 0
             failed = 0
@@ -138,7 +139,9 @@ class PlaylistPipeline:
                         format_type=format_type,
                         custom_title=song_name,
                         custom_artist=artist_name,
-                        custom_thumbnail=thumb
+                        custom_thumbnail=thumb,
+                        user_id=user_id,
+                        is_single_download=False
                     )
 
                     # Poll existing downloader until task finishes
@@ -228,11 +231,26 @@ class PlaylistPipeline:
                 job.status = "COMPLETED"
             db.commit()
             logger.info(f"Playlist job {job_id} finished: {successful} successful, {failed} failed out of {processed}.")
+
+            # Automatic ephemeral cookie purge: All songs in the playlist have finished downloading!
+            if user_id:
+                try:
+                    from app.services.user_cookie_store import UserCookieStore
+                    UserCookieStore.delete_cookies(user_id)
+                    logger.info(f"Purged temporary cookies for user {user_id} after playlist batch download completion.")
+                except Exception as c_err:
+                    logger.warning(f"Error purging cookies for user {user_id}: {c_err}")
         except Exception as e:
             logger.error(f"Fatal error in playlist pipeline {job_id}: {e}", exc_info=True)
             if job:
                 job.status = "FAILED"
                 db.commit()
+            if user_id:
+                try:
+                    from app.services.user_cookie_store import UserCookieStore
+                    UserCookieStore.delete_cookies(user_id)
+                except Exception:
+                    pass
         finally:
             db.close()
 

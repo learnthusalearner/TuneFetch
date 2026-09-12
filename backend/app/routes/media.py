@@ -1,14 +1,73 @@
 import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from app.core.config import AUTO_DELETE_ON_DOWNLOAD
 from app.services.downloader import DownloadManager
 from app.models.schemas import InfoRequest, DownloadRequest
+from app.models.db_models import User
+from app.utils.auth_helper import get_current_user
 from app.utils.sanitizer import build_content_disposition_header
 
 router = APIRouter(prefix="/api", tags=["Media"])
+
+class UserCookiePayload(BaseModel):
+    cookies: str
+
+@router.post("/user-cookies")
+def set_user_cookies(
+    payload: UserCookiePayload,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Saves user-provided YouTube verification cookies in ephemeral server memory.
+    Cookies are held ONLY while downloads are processed and deleted once all songs are downloaded.
+    """
+    raw_cookies = payload.cookies or ""
+    if not raw_cookies.strip():
+        raise HTTPException(status_code=400, detail="Cookies content cannot be empty.")
+
+    from app.services.user_cookie_store import UserCookieStore
+    count = UserCookieStore.set_cookies(current_user.id, raw_cookies)
+    if count == 0:
+        raise HTTPException(status_code=400, detail="Could not parse any valid cookies. Please verify the format.")
+
+    return {
+        "success": True,
+        "count": count,
+        "message": f"Successfully loaded {count} cookies. They will be automatically deleted once your downloads finish."
+    }
+
+@router.get("/user-cookies/status")
+def get_user_cookies_status(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns whether the current user has active ephemeral cookies in memory.
+    """
+    from app.services.user_cookie_store import UserCookieStore
+    has_cookies = UserCookieStore.has_cookies(current_user.id)
+    count = UserCookieStore.get_cookie_count(current_user.id)
+    return {
+        "has_cookies": has_cookies,
+        "count": count
+    }
+
+@router.delete("/user-cookies")
+def delete_user_cookies(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Manually purges the user's cookies from server memory.
+    """
+    from app.services.user_cookie_store import UserCookieStore
+    deleted = UserCookieStore.delete_cookies(current_user.id)
+    return {
+        "success": True,
+        "deleted": deleted
+    }
 
 @router.post("/info")
 def fetch_info(req: InfoRequest):
@@ -38,7 +97,10 @@ def get_stream_url(req: InfoRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/download")
-def start_download(req: DownloadRequest):
+def start_download(
+    req: DownloadRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     Spawns an asynchronous background download & conversion worker within a bounded thread pool.
     """
@@ -50,7 +112,9 @@ def start_download(req: DownloadRequest):
             format_type=req.format or "mp3-320",
             custom_title=req.title,
             custom_artist=req.artist,
-            custom_thumbnail=req.thumbnail
+            custom_thumbnail=req.thumbnail,
+            user_id=current_user.id,
+            is_single_download=True
         )
         return {"success": True, "task_id": task_id}
     except Exception as e:

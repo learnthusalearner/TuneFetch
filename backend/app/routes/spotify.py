@@ -229,7 +229,9 @@ async def download_single_spotify_track(
         format_type=req.format or "mp3-320",
         custom_title=req.song_name,
         custom_artist=req.artist_name,
-        custom_thumbnail=req.thumbnail or ""
+        custom_thumbnail=req.thumbnail or "",
+        user_id=current_user.id,
+        is_single_download=True
     )
     return {
         "success": True,
@@ -297,6 +299,14 @@ def download_playlist_zip(
     download_name = job.zip_filename or "Thanks_for_downloading.zip"
     if not download_name.lower().endswith(".zip"):
         download_name = f"{download_name}.zip"
+
+    # Ensure user's ephemeral cookies are permanently purged upon ZIP delivery
+    if job.user_id:
+        try:
+            from app.services.user_cookie_store import UserCookieStore
+            UserCookieStore.delete_cookies(job.user_id)
+        except Exception:
+            pass
 
     return FileResponse(
         path=job.zip_path,
