@@ -13,7 +13,7 @@ import BatchProgressCard from '../components/Spotify/BatchProgressCard';
 import ProgressCard from '../components/ProgressCard';
 import CookieModal from '../components/Spotify/CookieModal';
 
-import { api } from '../services/api';
+import { api, setStoredUserId } from '../services/api';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDownloadTask } from '../hooks/useDownloadTask';
 import { STORAGE_KEYS } from '../constants';
@@ -34,6 +34,7 @@ export default function DashboardPage({ onGoHome }) {
   const [toasts, setToasts] = useState([]);
 
   /* ── Spotify state ─────────────────────────────────────────── */
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [spotifyStatus, setSpotifyStatus] = useState({ connected: false, spotify_user: null });
   const [spotifyPlaylists, setSpotifyPlaylists] = useState([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
@@ -107,6 +108,10 @@ export default function DashboardPage({ onGoHome }) {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
+      const urlUserId = params.get('user_id');
+      if (urlUserId) {
+        setStoredUserId(urlUserId);
+      }
       if (params.get('spotify') === 'connected') {
         pushToast('Spotify account connected successfully!', 'success');
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -123,6 +128,7 @@ export default function DashboardPage({ onGoHome }) {
 
   /* ── Spotify helpers ───────────────────────────────────────── */
   const refreshSpotifyStatus = async () => {
+    setIsCheckingAuth(true);
     try {
       const status = await api.getSpotifyStatus();
       setSpotifyStatus(status);
@@ -137,7 +143,10 @@ export default function DashboardPage({ onGoHome }) {
           }
         } catch {}
       }
-    } catch {}
+    } catch {
+    } finally {
+      setIsCheckingAuth(false);
+    }
   };
 
   const fetchPlaylists = async () => {
@@ -342,6 +351,8 @@ export default function DashboardPage({ onGoHome }) {
           historyCount={history.length}
           spotifyUser={spotifyStatus.spotify_user}
           onGoHome={onGoHome}
+          onOpenCookies={() => setShowCookieModal(true)}
+          cookieStatus={cookieStatus}
         />
 
         {/* History drawer */}
@@ -377,6 +388,58 @@ export default function DashboardPage({ onGoHome }) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Ephemeral YouTube Cookie Alert Banner (always visible when cookies are absent) */}
+        {!cookieStatus.has_cookies && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '12px 18px',
+              borderRadius: '14px',
+              background: 'linear-gradient(90deg, rgba(234, 179, 8, 0.12) 0%, rgba(202, 138, 4, 0.05) 100%)',
+              border: '1px solid rgba(234, 179, 8, 0.28)',
+              color: '#fef08a',
+              fontSize: '13px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Cookie size={18} style={{ color: '#facc15', flexShrink: 0 }} />
+              <span>
+                <strong>YouTube Verification Cookies:</strong> Paste your <code>cookies.txt</code> to bypass bot detection on production downloads. They are stored only in memory and auto-deleted immediately after completion.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCookieModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: 'rgba(234, 179, 8, 0.25)',
+                border: '1px solid rgba(234, 179, 8, 0.5)',
+                color: '#fef08a',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <Cookie size={13} />
+              <span>Paste cookies.txt</span>
+            </button>
+          </motion.div>
+        )}
 
         {/* Batch job progress (always visible above tabs) */}
         <AnimatePresence>
@@ -416,7 +479,24 @@ export default function DashboardPage({ onGoHome }) {
 
         {/* ── WORKSPACE CONTENT ─────────────────────────────────── */}
         <motion.div key="spotify" {...pageVariants} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {!spotifyStatus.connected ? (
+              {isCheckingAuth ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '60px 24px',
+                  gap: 16,
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: 16,
+                  border: '1px solid rgba(255, 255, 255, 0.06)'
+                }}>
+                  <RefreshCw size={26} className="spinner" style={{ color: 'var(--accent-green)' }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Checking Spotify authorization...
+                  </span>
+                </div>
+              ) : !spotifyStatus.connected ? (
                 <SpotifyConnect
                   spotifyStatus={spotifyStatus}
                   onConnect={handleSpotifyConnect}

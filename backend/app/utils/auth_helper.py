@@ -71,32 +71,62 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Dependency that identifies the application user via signed HTTP-only session cookie.
-    If no valid session exists, initializes an isolated new User record.
+    Dependency that identifies the application user via:
+    1. X-User-Id header (cross-origin resilient for Vercel <-> Render)
+    2. Authorization Bearer header
+    3. user_id query parameter
+    4. Signed HTTP-only session cookie fallback
     """
-    raw_cookie = request.cookies.get(SESSION_COOKIE_NAME)
     user_id = None
 
-    if raw_cookie:
-        user_id = unsign_session_id(raw_cookie)
+    # 1. Check X-User-Id header (crucial when third-party cookies are blocked)
+    header_user_id = request.headers.get("x-user-id") or request.headers.get("X-User-Id")
+    if header_user_id and len(header_user_id.strip()) >= 5:
+        user_id = header_user_id.strip()
+
+    # 2. Check Authorization header
+    if not user_id:
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+            if len(token) >= 5:
+                user_id = token
+
+    # 3. Check query param
+    if not user_id:
+        param_user_id = request.query_params.get("user_id")
+        if param_user_id and len(param_user_id.strip()) >= 5:
+            user_id = param_user_id.strip()
+
+    # 4. Check signed session cookie fallback
+    if not user_id:
+        raw_cookie = request.cookies.get(SESSION_COOKIE_NAME)
+        if raw_cookie:
+            user_id = unsign_session_id(raw_cookie)
 
     user: Optional[User] = None
     if user_id:
         user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        # Create new isolated User record
-        user = User()
+        if user_id and len(user_id) >= 5:
+            user = User(id=user_id)
+        else:
+            user = User()
         db.add(user)
         db.commit()
         db.refresh(user)
-
-        # Set secure HTTP-only cookie
-        set_session_cookie(response, user.id)
     else:
-        # Update last seen timestamp
         user.last_seen_at = datetime.now(timezone.utc)
         db.commit()
 
+    # Expose and attach X-User-Id header on response
+    try:
+        response.headers["X-User-Id"] = user.id
+        response.headers["Access-Control-Expose-Headers"] = "X-User-Id, Content-Disposition"
+    except Exception:
+        pass
+
+    set_session_cookie(response, user.id)
     return user
 

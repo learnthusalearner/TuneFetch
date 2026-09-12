@@ -17,6 +17,9 @@ logger = logging.getLogger("user_cookie_store")
 class UserCookieStore:
     # Ephemeral store: user_id -> { "jar": MozillaCookieJar, "count": int, "created_at": float }
     _store: Dict[str, Dict[str, Any]] = {}
+    _latest_jar: Optional[http.cookiejar.MozillaCookieJar] = None
+    _latest_count: int = 0
+    _latest_time: float = 0.0
     _lock = threading.Lock()
     _ttl_seconds = 7200  # 2 hours maximum lifetime before automatic cleanup
 
@@ -37,37 +40,52 @@ class UserCookieStore:
                 "count": count,
                 "created_at": time.time()
             }
+            cls._latest_jar = jar
+            cls._latest_count = count
+            cls._latest_time = time.time()
 
         logger.info(f"UserCookieStore: Loaded {count} temporary cookies for user {user_id}. Auto-delete scheduled upon download completion.")
         return count
 
     @classmethod
-    def get_cookies(cls, user_id: str) -> Optional[http.cookiejar.MozillaCookieJar]:
+    def get_cookies(cls, user_id: Optional[str] = None) -> Optional[http.cookiejar.MozillaCookieJar]:
         """
         Retrieves the active MozillaCookieJar for a user if still valid.
+        Gracefully falls back to the most recently saved jar if user_id was reissued.
         """
         with cls._lock:
-            record = cls._store.get(user_id)
-            if not record:
-                return None
+            if user_id:
+                record = cls._store.get(user_id)
+                if record:
+                    # Expire if older than TTL
+                    if time.time() - record["created_at"] > cls._ttl_seconds:
+                        del cls._store[user_id]
+                        logger.info(f"UserCookieStore: Expired stale cookies for user {user_id}.")
+                    else:
+                        return record["jar"]
 
-            # Expire if older than TTL
-            if time.time() - record["created_at"] > cls._ttl_seconds:
-                del cls._store[user_id]
-                logger.info(f"UserCookieStore: Expired stale cookies for user {user_id}.")
-                return None
+            # Fallback to latest jar if within TTL
+            if cls._latest_jar and (time.time() - cls._latest_time <= cls._ttl_seconds):
+                return cls._latest_jar
 
-            return record["jar"]
+            return None
 
     @classmethod
-    def has_cookies(cls, user_id: str) -> bool:
+    def get_latest_cookies(cls) -> Optional[http.cookiejar.MozillaCookieJar]:
+        return cls.get_cookies()
+
+    @classmethod
+    def has_cookies(cls, user_id: Optional[str] = None) -> bool:
         return cls.get_cookies(user_id) is not None
 
     @classmethod
-    def get_cookie_count(cls, user_id: str) -> int:
+    def get_cookie_count(cls, user_id: Optional[str] = None) -> int:
         with cls._lock:
-            record = cls._store.get(user_id)
-            return record["count"] if record else 0
+            if user_id and user_id in cls._store:
+                return cls._store[user_id]["count"]
+            if cls._latest_jar and (time.time() - cls._latest_time <= cls._ttl_seconds):
+                return cls._latest_count
+            return 0
 
     @classmethod
     def delete_cookies(cls, user_id: str) -> bool:
@@ -75,11 +93,18 @@ class UserCookieStore:
         Permanently wipes and deletes the user's cookies from server memory.
         """
         with cls._lock:
+            deleted = False
             if user_id in cls._store:
                 del cls._store[user_id]
                 logger.info(f"UserCookieStore: [DELETED] Permanently wiped cookies for user {user_id}.")
-                return True
-        return False
+                deleted = True
+
+            if len(cls._store) == 0:
+                cls._latest_jar = None
+                cls._latest_count = 0
+                cls._latest_time = 0.0
+
+            return deleted
 
     @classmethod
     def cleanup_expired(cls):

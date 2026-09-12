@@ -3,13 +3,70 @@ export const BACKEND_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
 export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 export const SPOTIFY_BASE = BACKEND_URL ? `${BACKEND_URL}/spotify` : '/spotify';
 
+/**
+ * Retrieves the persisted client-side user UUID.
+ * Bypasses third-party cookie blocking on cross-origin deployments (Vercel <-> Render).
+ */
+export const getStoredUserId = () => {
+  try {
+    let id = localStorage.getItem('tunefetch_user_id');
+    if (!id || id.trim().length < 5) {
+      // Generate standard RFC4122 v4 UUID
+      id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+      localStorage.setItem('tunefetch_user_id', id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Persists the confirmed user UUID across sessions.
+ */
+export const setStoredUserId = (id) => {
+  try {
+    if (id && typeof id === 'string' && id.trim().length >= 5) {
+      localStorage.setItem('tunefetch_user_id', id.trim());
+    }
+  } catch {}
+};
+
+/**
+ * High-reliability fetch wrapper with automatic user identification & cookie credentials.
+ */
+async function secureFetch(url, options = {}) {
+  const opts = { ...options };
+  opts.credentials = 'include';
+  opts.headers = { ...(opts.headers || {}) };
+
+  const userId = getStoredUserId();
+  if (userId) {
+    opts.headers['X-User-Id'] = userId;
+  }
+
+  const res = await fetch(url, opts);
+
+  // Sync session ID if returned from server
+  const returnedUserId = res.headers.get('x-user-id');
+  if (returnedUserId) {
+    setStoredUserId(returnedUserId);
+  }
+
+  return res;
+}
+
 export const api = {
   /**
    * Health check to detect backend connectivity and ffmpeg availability
    */
   async getHealth() {
     try {
-      const res = await fetch(`${API_BASE}/health`, { credentials: 'include' });
+      const res = await secureFetch(`${API_BASE}/health`);
       if (!res.ok) throw new Error('Health check failed');
       return await res.json();
     } catch (e) {
@@ -22,10 +79,9 @@ export const api = {
    * Fetches metadata for single tracks or URL
    */
   async fetchInfo(url) {
-    const res = await fetch(`${API_BASE}/info`, {
+    const res = await secureFetch(`${API_BASE}/info`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ url: url.trim() }),
     });
     const data = await res.json();
@@ -39,10 +95,9 @@ export const api = {
    * Resolves direct stream URL and metadata for client-side / distributed playback
    */
   async fetchDirectStreamUrl(url) {
-    const res = await fetch(`${API_BASE}/stream-url`, {
+    const res = await secureFetch(`${API_BASE}/stream-url`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ url: url.trim() }),
     });
     const data = await res.json();
@@ -56,10 +111,9 @@ export const api = {
    * Initiates a single download task
    */
   async startDownload({ url, format = 'mp3-320', title, artist, thumbnail }) {
-    const res = await fetch(`${API_BASE}/download`, {
+    const res = await secureFetch(`${API_BASE}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({
         url: url.trim(),
         format,
@@ -79,7 +133,7 @@ export const api = {
    * Polls single task status
    */
   async getStatus(taskId) {
-    const res = await fetch(`${API_BASE}/status/${taskId}`, { credentials: 'include' });
+    const res = await secureFetch(`${API_BASE}/status/${taskId}`);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Task status check failed.');
@@ -92,11 +146,13 @@ export const api = {
    */
   getDownloadUrl(taskId, filename = '') {
     if (!taskId) return '';
+    const userId = getStoredUserId();
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
     if (filename) {
       const safe = filename.replace(/[<>:"/\\|?*]/g, '_');
-      return `${API_BASE}/file/${taskId}/${encodeURIComponent(safe)}`;
+      return `${API_BASE}/file/${taskId}/${encodeURIComponent(safe)}${query}`;
     }
-    return `${API_BASE}/file/${taskId}`;
+    return `${API_BASE}/file/${taskId}${query}`;
   },
 
   /**
@@ -104,16 +160,20 @@ export const api = {
    */
   getStreamUrl(taskId) {
     if (!taskId) return '';
-    return `${API_BASE}/stream/${taskId}`;
+    const userId = getStoredUserId();
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return `${API_BASE}/stream/${taskId}${query}`;
   },
 
   // ==================== SPOTIFY OAUTH & PLAYLIST API ====================
 
   /**
-   * Returns Spotify authorization entrypoint URL
+   * Returns Spotify authorization entrypoint URL bound to user UUID
    */
   getSpotifyAuthUrl() {
-    return `${SPOTIFY_BASE}/auth`;
+    const userId = getStoredUserId();
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return `${SPOTIFY_BASE}/auth${query}`;
   },
 
   /**
@@ -121,9 +181,13 @@ export const api = {
    */
   async getSpotifyStatus() {
     try {
-      const res = await fetch(`${SPOTIFY_BASE}/status`, { credentials: 'include' });
+      const res = await secureFetch(`${SPOTIFY_BASE}/status`);
       if (!res.ok) return { connected: false, spotify_user: null };
-      return await res.json();
+      const data = await res.json();
+      if (data.user_id) {
+        setStoredUserId(data.user_id);
+      }
+      return data;
     } catch (e) {
       return { connected: false, spotify_user: null };
     }
@@ -133,9 +197,8 @@ export const api = {
    * Disconnects/unlinks current user's Spotify account
    */
   async disconnectSpotify() {
-    const res = await fetch(`${SPOTIFY_BASE}/disconnect`, {
-      method: 'POST',
-      credentials: 'include'
+    const res = await secureFetch(`${SPOTIFY_BASE}/disconnect`, {
+      method: 'POST'
     });
     return await res.json();
   },
@@ -144,7 +207,7 @@ export const api = {
    * Retrieves all playlists for the authenticated Spotify user
    */
   async getSpotifyPlaylists() {
-    const res = await fetch(`${SPOTIFY_BASE}/playlists`, { credentials: 'include' });
+    const res = await secureFetch(`${SPOTIFY_BASE}/playlists`);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to fetch Spotify playlists.');
@@ -156,7 +219,7 @@ export const api = {
    * Retrieves normalized tracklist for a playlist without starting download
    */
   async getPlaylistTracks(playlistId) {
-    const res = await fetch(`${SPOTIFY_BASE}/playlists/${playlistId}/tracks`, { credentials: 'include' });
+    const res = await secureFetch(`${SPOTIFY_BASE}/playlists/${playlistId}/tracks`);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to fetch playlist tracks.');
@@ -173,10 +236,9 @@ export const api = {
     if (trackIds && trackIds.length > 0) {
       payload.track_ids = trackIds;
     }
-    const res = await fetch(`${SPOTIFY_BASE}/playlists/${playlistId}/download`, {
+    const res = await secureFetch(`${SPOTIFY_BASE}/playlists/${playlistId}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(payload),
     });
     const data = await res.json();
@@ -190,10 +252,9 @@ export const api = {
    * Dispatches single track download with DB caching & Serper candidate resolution
    */
   async downloadSingleSpotifyTrack({ song_name, artist_name, thumbnail, format = 'mp3-320' }) {
-    const res = await fetch(`${SPOTIFY_BASE}/track/download`, {
+    const res = await secureFetch(`${SPOTIFY_BASE}/track/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({
         song_name,
         artist_name,
@@ -212,7 +273,7 @@ export const api = {
    * Polls batch playlist download job progress
    */
   async getPlaylistJobStatus(jobId) {
-    const res = await fetch(`${SPOTIFY_BASE}/jobs/${jobId}`, { credentials: 'include' });
+    const res = await secureFetch(`${SPOTIFY_BASE}/jobs/${jobId}`);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Failed to get playlist job status.');
@@ -225,7 +286,7 @@ export const api = {
    */
   async getLatestPlaylistJob() {
     try {
-      const res = await fetch(`${SPOTIFY_BASE}/jobs/latest`, { credentials: 'include' });
+      const res = await secureFetch(`${SPOTIFY_BASE}/jobs/latest`);
       if (!res.ok) return null;
       const data = await res.json();
       return data.job || null;
@@ -239,7 +300,9 @@ export const api = {
    */
   getPlaylistZipUrl(jobId) {
     if (!jobId) return '';
-    return `${SPOTIFY_BASE}/jobs/${jobId}/zip`;
+    const userId = getStoredUserId();
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return `${SPOTIFY_BASE}/jobs/${jobId}/zip${query}`;
   },
 
   // ==================== YOUTUBE VERIFICATION COOKIES API ====================
@@ -248,10 +311,9 @@ export const api = {
    * Saves ephemeral user cookies for download authentication
    */
   async saveUserCookies(cookies) {
-    const res = await fetch(`${API_BASE}/user-cookies`, {
+    const res = await secureFetch(`${API_BASE}/user-cookies`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ cookies })
     });
     const data = await res.json();
@@ -266,7 +328,7 @@ export const api = {
    */
   async getUserCookieStatus() {
     try {
-      const res = await fetch(`${API_BASE}/user-cookies/status`, { credentials: 'include' });
+      const res = await secureFetch(`${API_BASE}/user-cookies/status`);
       if (!res.ok) return { has_cookies: false, count: 0 };
       return await res.json();
     } catch {
@@ -279,9 +341,8 @@ export const api = {
    */
   async clearUserCookies() {
     try {
-      const res = await fetch(`${API_BASE}/user-cookies`, {
-        method: 'DELETE',
-        credentials: 'include'
+      const res = await secureFetch(`${API_BASE}/user-cookies`, {
+        method: 'DELETE'
       });
       return await res.json();
     } catch {
@@ -289,4 +350,3 @@ export const api = {
     }
   }
 };
-

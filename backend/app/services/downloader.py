@@ -334,12 +334,21 @@ def fetch_youtube_with_fallback(
     Raises RuntimeError if all clients fail.
     """
     last_err = None
+    cookie_jar = custom_cookies
+    if not cookie_jar:
+        try:
+            from app.services.user_cookie_store import UserCookieStore
+            cookie_jar = UserCookieStore.get_latest_cookies()
+        except Exception:
+            pass
+    if not cookie_jar:
+        cookie_jar = get_cookie_jar()
 
     # Try with proxy (if configured), then direct if proxy throws an auth/network failure
     proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
 
     for use_proxy in proxy_attempts:
-        configure_urllib_network(use_proxy=use_proxy, custom_cookies=custom_cookies)
+        configure_urllib_network(use_proxy=use_proxy, custom_cookies=cookie_jar)
         for client_name in CLIENT_FALLBACK_ORDER:
             try:
                 yt = build_pytubefix_instance(
@@ -673,6 +682,13 @@ class DownloadManager:
                 try:
                     from app.services.user_cookie_store import UserCookieStore
                     active_cookies = UserCookieStore.get_cookies(user_id)
+                except Exception:
+                    pass
+
+            if not active_cookies:
+                try:
+                    from app.services.user_cookie_store import UserCookieStore
+                    active_cookies = UserCookieStore.get_latest_cookies()
                 except Exception:
                     pass
 

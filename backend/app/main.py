@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition"]
+        expose_headers=["Content-Disposition", "X-User-Id", "x-user-id"]
     )
 
     # Register modular route controllers

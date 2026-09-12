@@ -67,18 +67,22 @@ def spotify_auth_start(
     request: Request,
     response: Response,
     redirect: bool = Query(True, description="Whether to redirect immediately (302) or return JSON"),
+    user_id: Optional[str] = Query(None, description="Frontend user UUID to bind Spotify connection to"),
     current_user: User = Depends(get_current_user)
 ):
     """
     Initiates the Spotify PKCE OAuth flow with state protection.
+    Binds to incoming frontend user_id to prevent duplicate OAuth logins.
     """
+    effective_user_id = user_id or current_user.id
     frontend_url = get_frontend_url(request)
-    auth_url = SpotifyService.create_auth_url(user_id=current_user.id, request=request, frontend_url=frontend_url)
+    auth_url = SpotifyService.create_auth_url(user_id=effective_user_id, request=request, frontend_url=frontend_url)
     if redirect:
         resp = RedirectResponse(url=auth_url)
-        set_session_cookie(resp, current_user.id)
+        resp.headers["X-User-Id"] = effective_user_id
+        set_session_cookie(resp, effective_user_id)
         return resp
-    return {"success": True, "auth_url": auth_url}
+    return {"success": True, "auth_url": auth_url, "user_id": effective_user_id}
 
 @router.get("/callback")
 async def spotify_auth_callback(
@@ -109,7 +113,8 @@ async def spotify_auth_callback(
             db=db,
             request=request
         )
-        resp = RedirectResponse(url=f"{target_frontend}/?spotify=connected")
+        resp = RedirectResponse(url=f"{target_frontend}/?spotify=connected&user_id={resolved_user_id}")
+        resp.headers["X-User-Id"] = resolved_user_id
         set_session_cookie(resp, resolved_user_id)
         return resp
     except Exception as e:
@@ -127,10 +132,11 @@ def get_spotify_status(
     """
     account = db.query(SpotifyAccount).filter(SpotifyAccount.user_id == current_user.id).first()
     if not account:
-        return {"connected": False, "spotify_user": None}
+        return {"connected": False, "user_id": current_user.id, "spotify_user": None}
 
     return {
         "connected": True,
+        "user_id": current_user.id,
         "spotify_user": {
             "id": account.spotify_user_id,
             "display_name": account.display_name,
