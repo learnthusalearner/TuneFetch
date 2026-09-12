@@ -339,20 +339,51 @@ class TuneFetchInstaller(tk.Tk):
             text="License & Privacy Terms",
             bg=BG,
             fg=TEXT,
-            font=("Segoe UI", 20, "bold")
-        ).pack(anchor="w", pady=(0, 4))
+            font=("Segoe UI", 18, "bold")
+        ).pack(anchor="w", pady=(0, 2))
 
         tk.Label(
             self.content_frame,
-            text="Please review and accept the agreement before proceeding with installation.",
+            text="Please review and agree to the terms below to proceed with installation.",
             bg=BG,
             fg=MUTED,
-            font=("Segoe UI", 10)
-        ).pack(anchor="w", pady=(0, 10))
+            font=("Segoe UI", 9)
+        ).pack(anchor="w", pady=(0, 8))
 
-        # Scrollable license text box
-        text_container = tk.Frame(self.content_frame, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
-        text_container.pack(fill="both", expand=True, pady=(0, 12))
+        # Checkbox Container (PACKED AT BOTTOM FIRST SO IT IS NEVER CLIPPED)
+        agreement_frame = tk.Frame(
+            self.content_frame,
+            bg=SURFACE,
+            highlightbackground=BORDER,
+            highlightthickness=1
+        )
+        agreement_frame.pack(side="bottom", fill="x", pady=(10, 0))
+
+        chk_box = tk.Checkbutton(
+            agreement_frame,
+            text="  I acknowledge and agree to these terms and privacy notice",
+            variable=self.accepted_terms,
+            command=self.toggle_install_button,
+            bg=SURFACE,
+            fg=TEXT,
+            activebackground=SURFACE,
+            activeforeground=TEXT,
+            selectcolor=SURFACE_2,
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=12,
+            pady=8
+        )
+        chk_box.pack(side="left")
+
+        # Scrollable license text box (Takes remaining space above checkbox)
+        text_container = tk.Frame(
+            self.content_frame,
+            bg=SURFACE,
+            highlightbackground=BORDER,
+            highlightthickness=1
+        )
+        text_container.pack(side="top", fill="both", expand=True)
 
         scrollbar = tk.Scrollbar(text_container)
         scrollbar.pack(side="right", fill="y")
@@ -364,31 +395,16 @@ class TuneFetchInstaller(tk.Tk):
             fg="#e2e8f0",
             font=("Segoe UI", 9),
             padx=14,
-            pady=12,
+            pady=10,
             bd=0,
             relief="flat",
+            height=9,
             yscrollcommand=scrollbar.set
         )
         text_widget.insert("1.0", LICENSE_AND_PRIVACY.strip())
         text_widget.configure(state="disabled")
         text_widget.pack(fill="both", expand=True)
         scrollbar.configure(command=text_widget.yview)
-
-        # Checkbox: Acceptance required to enable Install button
-        chk_box = tk.Checkbutton(
-            self.content_frame,
-            text="  I have read and agree to the License & Privacy Terms",
-            variable=self.accepted_terms,
-            command=self.toggle_install_button,
-            bg=BG,
-            fg=TEXT,
-            activebackground=BG,
-            activeforeground=TEXT,
-            selectcolor=SURFACE_2,
-            font=("Segoe UI", 9, "bold"),
-            cursor="hand2"
-        )
-        chk_box.pack(anchor="w", pady=(0, 4))
 
     def toggle_install_button(self):
         """Enables or disables the Install button based on terms acceptance."""
@@ -412,7 +428,7 @@ class TuneFetchInstaller(tk.Tk):
         if not self.accepted_terms.get():
             messagebox.showwarning(
                 "Agreement Required",
-                "You must accept the License & Privacy Terms to install TuneFetch."
+                "Please check 'I acknowledge and agree to these terms' before installing TuneFetch."
             )
             return
         self.show_installing()
