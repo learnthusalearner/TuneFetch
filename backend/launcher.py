@@ -156,23 +156,26 @@ def run_cli_mode(code: str):
         tracks=tracks
     )
 
-    last_completed = 0
+    seen_completed_indices = set()
     start_time = time.time()
 
     while True:
         status = LocalBatchDownloader.get_batch_status(batch_id)
         if not status:
-            time.sleep(0.3)
+            time.sleep(0.2)
             continue
 
         b_status = status.get("status", "PENDING")
         total = status.get("total_tracks", len(tracks))
-        completed = status.get("successful_tracks", 0)
+        completed = status.get("completed_tracks", status.get("successful_tracks", 0))
         failed = status.get("failed_tracks", 0)
         processed = completed + failed
 
+        if status.get("target_folder"):
+            playlist_folder = Path(status["target_folder"])
+
         current_title = status.get("current_track_title", "Downloading...")
-        current_speed = status.get("current_speed", "0.0 MB/s")
+        current_speed = status.get("current_track_speed", status.get("current_speed", "0 KB/s"))
         current_progress = float(status.get("current_track_progress", 0))
 
         elapsed = time.time() - start_time
@@ -184,29 +187,51 @@ def run_cli_mode(code: str):
         eta_m, eta_s = divmod(eta_seconds, 60)
         elapsed_m, elapsed_s = divmod(int(elapsed), 60)
 
-        # Print per-track completion lines
-        track_list = status.get("tracks", [])
-        if len(track_list) > last_completed:
-            for t in track_list[last_completed:]:
+        # Print per-track permanent completion lines as each song completes
+        track_list = status.get("tracks_progress") or status.get("tracks") or []
+        for i, t in enumerate(track_list):
+            t_status = t.get("status")
+            if i not in seen_completed_indices and t_status in ("COMPLETED", "ERROR", "TIMEOUT"):
+                seen_completed_indices.add(i)
                 sys.stdout.write("\r\033[K")
-                status_symbol = "[✓]" if t.get("status") == "COMPLETED" else "[✕]"
-                title_clean = t.get("title", "Track")[:45]
-                print(f"  {status_symbol} {title_clean:<45} (Saved 320 kbps)")
-            last_completed = len(track_list)
+                t_title = t.get("title", f"Track {i+1}")
+                t_artist = t.get("artist", "")
+                full_t = f"{t_artist} - {t_title}" if t_artist else t_title
+                full_t_clean = (full_t[:46] + "..") if len(full_t) > 48 else full_t
+                if t_status == "COMPLETED":
+                    print(f"  [✓] [{i+1}/{total}] {full_t_clean:<48} (Saved 320 kbps MP3)")
+                else:
+                    print(f"  [✕] [{i+1}/{total}] {full_t_clean:<48} (Skipped - Issue)")
+                sys.stdout.flush()
 
-        # Active progress bar
+        # Active progress bar for currently downloading song
         if b_status == "DOWNLOADING":
             curr_idx = min(total, processed + 1)
             bar = format_progress_bar(current_progress, width=20)
-            short_title = (current_title[:28] + "..") if len(current_title) > 30 else current_title
+            short_title = (current_title[:30] + "..") if len(current_title) > 32 else current_title
 
             sys.stdout.write(
-                f"\r\033[K[+] [{curr_idx}/{total}] {short_title:<30} [{bar}] {int(current_progress):>3}% | {current_speed:>8} | ETA: {eta_m:02d}:{eta_s:02d}"
+                f"\r\033[K[↓] [{curr_idx}/{total}] {short_title:<32} [{bar}] {int(current_progress):>3}% | {current_speed:>10} | ETA: {eta_m:02d}:{eta_s:02d}"
             )
             sys.stdout.flush()
 
         # Completed
         if b_status == "COMPLETED":
+            # Print any final tracks that finished in last tick
+            for i, t in enumerate(track_list):
+                t_status = t.get("status")
+                if i not in seen_completed_indices and t_status in ("COMPLETED", "ERROR", "TIMEOUT"):
+                    seen_completed_indices.add(i)
+                    sys.stdout.write("\r\033[K")
+                    t_title = t.get("title", f"Track {i+1}")
+                    t_artist = t.get("artist", "")
+                    full_t = f"{t_artist} - {t_title}" if t_artist else t_title
+                    full_t_clean = (full_t[:46] + "..") if len(full_t) > 48 else full_t
+                    if t_status == "COMPLETED":
+                        print(f"  [✓] [{i+1}/{total}] {full_t_clean:<48} (Saved 320 kbps MP3)")
+                    else:
+                        print(f"  [✕] [{i+1}/{total}] {full_t_clean:<48} (Skipped - Issue)")
+
             sys.stdout.write("\r\033[K")
             print()
             print("=" * 70)
@@ -217,7 +242,7 @@ def run_cli_mode(code: str):
             print()
             break
 
-        time.sleep(0.35)
+        time.sleep(0.2)
 
 
 # ============================================================

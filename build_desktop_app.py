@@ -14,13 +14,15 @@ def main():
     print("      Building TuneFetch Desktop App     ")
     print("=========================================")
     
-    # Step 1: Ensure frontend is built
-    print("\n[1/4] Building Frontend...")
-    if not (frontend_dir / "dist" / "index.html").exists():
-        print("Frontend dist not found. Please run 'npm run build' inside the frontend folder first.")
-        # Alternatively, we could run it automatically:
-        # subprocess.run("npm install", cwd=frontend_dir, shell=True, check=True)
-        # subprocess.run("npm run build", cwd=frontend_dir, shell=True, check=True)
+    # Step 1: Build fresh frontend bundle
+    print("\n[1/4] Building Frontend bundle...")
+    npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
+    try:
+        subprocess.run([npm_cmd, "run", "build"], cwd=frontend_dir, check=True)
+    except Exception as e:
+        print(f"Warning: npm run build failed ({e}). Checking if existing dist can be used...")
+        if not (frontend_dir / "dist" / "index.html").exists():
+            raise RuntimeError("Frontend dist missing and build failed!")
     
     # Step 2: Copy frontend build to backend/frontend_dist
     print("\n[2/4] Copying frontend build to backend...")

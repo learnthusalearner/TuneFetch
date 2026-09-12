@@ -2,13 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertCircle, RefreshCw, LogOut, DownloadCloud,
-  FileCode, ArrowRight, CheckCircle2, FolderDown, Loader2
+  CheckCircle2, FolderDown, Loader2
 } from 'lucide-react';
 
 import Navbar from '../components/layout/Navbar';
 import { ToastContainer } from '../components/ui/Toast';
 import AudioPlayer from '../components/AudioPlayer';
-import HistoryDrawer from '../components/HistoryDrawer';
 import SpotifyConnect from '../components/Spotify/SpotifyConnect';
 import SpotifyPlaylists from '../components/Spotify/SpotifyPlaylists';
 import PlaylistTracksModal from '../components/Spotify/PlaylistTracksModal';
@@ -16,7 +15,6 @@ import BatchProgressCard from '../components/Spotify/BatchProgressCard';
 import ProgressCard from '../components/ProgressCard';
 
 import { api, setStoredUserId } from '../services/api';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDownloadTask } from '../hooks/useDownloadTask';
 import { STORAGE_KEYS } from '../constants';
 
@@ -28,7 +26,6 @@ const pageVariants = {
 };
 
 export default function DashboardPage({ onGoHome }) {
-  const [showHistory, setShowHistory] = useState(false);
   const [health, setHealth] = useState(null);
   const [generalError, setGeneralError] = useState(null);
 
@@ -47,21 +44,11 @@ export default function DashboardPage({ onGoHome }) {
   const [downloadingTrackId, setDownloadingTrackId] = useState(null);
   const [playingTrack, setPlayingTrack] = useState(null);
 
-
   /* ── Batch Job (persisted) ─────────────────────────────────── */
   const [activeJobId, setActiveJobId] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEYS.SPOTIFY_ACTIVE_JOB) || null; } catch { return null; }
   });
   const [activeJob, setActiveJob] = useState(null);
-
-  /* ── Local Desktop Batch & Cloud Session State ─────────────── */
-  const [sessionInput, setSessionInput] = useState('');
-  const [isImportingSession, setIsImportingSession] = useState(false);
-  const [localBatchId, setLocalBatchId] = useState(null);
-  const [localBatchProgress, setLocalBatchProgress] = useState(null);
-
-  /* ── Persistent history ────────────────────────────────────── */
-  const [history, setHistory] = useLocalStorage(STORAGE_KEYS.HISTORY, []);
 
   /* ── Helpers ───────────────────────────────────────────────── */
   const pushToast = useCallback((message, type = 'success') => {
@@ -87,15 +74,8 @@ export default function DashboardPage({ onGoHome }) {
 
   /* ── Single task hook ──────────────────────────────────────── */
   const handleTaskCompleted = useCallback((task) => {
-    setHistory(prev => [
-      {
-        file_id: task.file_id, title: task.title, artist: task.artist,
-        thumbnail: task.thumbnail, filename: task.filename,
-        filesize: task.filesize, timestamp: Date.now(),
-      },
-      ...prev.filter(h => h.file_id !== task.file_id),
-    ]);
-  }, [setHistory]);
+    pushToast(`Downloaded "${task.title || 'Track'}"!`, 'success');
+  }, [pushToast]);
 
   const { activeTask, activeTrackIndex, error: taskError, startDownload, resetTask, setError: setTaskError } =
     useDownloadTask(handleTaskCompleted);
@@ -220,63 +200,6 @@ export default function DashboardPage({ onGoHome }) {
     return () => { mounted = false; clearInterval(iv); };
   }, [activeJobId, setHistory]);
 
-  /* ── Local Desktop Batch Polling ───────────────────────────── */
-  useEffect(() => {
-    if (!localBatchId) return;
-    let active = true;
-    const iv = setInterval(async () => {
-      try {
-        const batch = await api.getLocalBatchProgress(localBatchId);
-        if (!active) return;
-        setLocalBatchProgress(batch);
-        if (batch.status === 'COMPLETED') {
-          clearInterval(iv);
-          pushToast(`🎉 All ${batch.completed_tracks} songs downloaded to ${batch.target_folder}!`, 'success');
-        }
-      } catch {}
-    }, 1000);
-    return () => { active = false; clearInterval(iv); };
-  }, [localBatchId, pushToast]);
-
-  /* ── Session Import Handler ────────────────────────────────── */
-  const handleImportSessionSubmit = async (e) => {
-    if (e) e.preventDefault();
-    const trimmed = (sessionInput || '').trim();
-    if (!trimmed) return;
-
-    setIsImportingSession(true);
-    setGeneralError(null);
-
-    try {
-      // 1. Raw JSON array of songs
-      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-        const parsedTracks = JSON.parse(trimmed);
-        if (!Array.isArray(parsedTracks) || parsedTracks.length === 0) {
-          throw new Error('Invalid songs JSON: expected a non-empty array of tracks.');
-        }
-        const data = await api.sendToLocalDesktop({
-          playlist_name: 'Imported Playlist',
-          tracks: parsedTracks
-        });
-        setLocalBatchId(data.batch_id);
-        pushToast(`Imported ${parsedTracks.length} songs! Downloading one by one into 'Thanks for downloading'...`, 'success');
-        setSessionInput('');
-        return;
-      }
-
-      // 2. Session Code (e.g. TF-4982 or 4982)
-      const code = trimmed.toUpperCase().startsWith('TF-') ? trimmed.toUpperCase() : `TF-${trimmed.toUpperCase()}`;
-      const data = await api.importSessionToLocalDesktop(code);
-      setLocalBatchId(data.batch_id);
-      pushToast(`Loaded session ${code} (${data.total_tracks} tracks)! Downloading one by one into 'Thanks for downloading'...`, 'success');
-      setSessionInput('');
-    } catch (err) {
-      setGeneralError(err.message || 'Failed to import session code or songs JSON.');
-    } finally {
-      setIsImportingSession(false);
-    }
-  };
-
   /* ── Event handlers ────────────────────────────────────────── */
   const handleSpotifyConnect = () => { window.location.href = api.getSpotifyAuthUrl(); };
 
@@ -381,25 +304,10 @@ export default function DashboardPage({ onGoHome }) {
       <div className="app-container">
         {/* Navbar */}
         <Navbar
-          health={health}
-          onToggleHistory={() => setShowHistory(v => !v)}
-          historyCount={history.length}
           spotifyUser={spotifyStatus.spotify_user}
           onGoHome={onGoHome}
           onLogout={handleSpotifyDisconnect}
         />
-
-        {/* History drawer */}
-        <AnimatePresence>
-          {showHistory && (
-            <HistoryDrawer
-              history={history}
-              onPlay={setPlayingTrack}
-              onClear={() => setHistory([])}
-              onClose={() => setShowHistory(false)}
-            />
-          )}
-        </AnimatePresence>
 
         {/* Error banner */}
         <AnimatePresence>
@@ -460,87 +368,14 @@ export default function DashboardPage({ onGoHome }) {
         </AnimatePresence>
 
         {/* Local Desktop Batch Progress Card */}
-        <AnimatePresence>
-          {localBatchProgress && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="glass-panel"
-              style={{
-                padding: '20px',
-                borderRadius: '16px',
-                background: 'linear-gradient(135deg, rgba(29, 185, 84, 0.08) 0%, rgba(10, 15, 25, 0.7) 100%)',
-                border: '1px solid rgba(29, 185, 84, 0.3)',
-                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
-                    <Laptop size={20} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#fff' }}>
-                      Downloading "{localBatchProgress.playlist_name}" to PC
-                    </h4>
-                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Folder: {localBatchProgress.target_folder}
-                    </p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {localBatchProgress.status === 'COMPLETED' ? (
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <CheckCircle2 size={14} /> Completed
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#1DB954', background: 'rgba(29, 185, 84, 0.15)', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <Loader2 size={13} className="spinner" /> Downloading ({localBatchProgress.completed_tracks}/{localBatchProgress.total_tracks})
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => { setLocalBatchId(null); setLocalBatchProgress(null); }}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
-                    title="Dismiss"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${localBatchProgress.total_tracks > 0 ? (localBatchProgress.completed_tracks / localBatchProgress.total_tracks) * 100 : 0}%`,
-                    height: '100%',
-                    background: 'linear-gradient(90deg, #1DB954 0%, #10b981 100%)',
-                    transition: 'width 0.3s ease'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <span>Current: {localBatchProgress.current_track_title || 'Preparing audio stream...'}</span>
-                <span>{localBatchProgress.completed_tracks} of {localBatchProgress.total_tracks} tracks</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ─── IMPORT SESSION CODE OR SONGS JSON CARD ─────────────── */}
+        {/* ─── QUICK TERMINAL APP DOWNLOAD / GUIDE BANNER ─────────── */}
         <div
           className="glass-panel"
           style={{
-            padding: '16px 20px',
+            padding: '16px 22px',
             borderRadius: '14px',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(135deg, rgba(29, 185, 84, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+            border: '1px solid rgba(29, 185, 84, 0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -548,55 +383,38 @@ export default function DashboardPage({ onGoHome }) {
             gap: '14px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(29, 185, 84, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
-              <FileCode size={20} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
+              <DownloadCloud size={22} />
             </div>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Have a Session Code or Songs JSON?
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>
+                TuneFetch Terminal Downloader
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Enter code (e.g. <code>TF-4982</code>) generated from the web app or paste songs JSON.
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Select any playlist below, click <strong>"Download on My PC"</strong> to get your session code, then run <code style={{ color: '#10b981' }}>tunefetch TF-XXXX</code>.
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleImportSessionSubmit} style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 280px', maxWidth: '440px' }}>
-            <input
-              type="text"
-              value={sessionInput}
-              onChange={(e) => setSessionInput(e.target.value)}
-              placeholder="Enter code (TF-XXXX) or paste JSON..."
-              style={{
-                flex: 1,
-                padding: '9px 14px',
-                borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid var(--border-glass)',
-                color: '#fff',
-                fontSize: '12.5px',
-                outline: 'none'
-              }}
-            />
-            <button
-              type="submit"
-              disabled={isImportingSession || !sessionInput.trim()}
-              className="btn-download-action"
-              style={{
-                padding: '9px 18px',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {isImportingSession ? <Loader2 size={14} className="spinner" /> : <ArrowRight size={14} />}
-              <span>Download</span>
-            </button>
-          </form>
+          <a
+            href={api.getInstallerDownloadUrl()}
+            download="TuneFetch_Setup.exe"
+            className="btn-download-action"
+            style={{
+              padding: '9px 18px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              whiteSpace: 'nowrap',
+              textDecoration: 'none'
+            }}
+          >
+            <FolderDown size={15} />
+            <span>Download Desktop Setup (.exe)</span>
+          </a>
         </div>
 
         {/* ── WORKSPACE CONTENT ─────────────────────────────────── */}

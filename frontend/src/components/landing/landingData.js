@@ -24,16 +24,6 @@ export const cardVariant = {
   transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
 };
 
-/* ─── Cursor Musical Notes (Staggered Vanishing Sequence) ───── */
-export const CURSOR_MUSICAL_NOTES = [
-  { char: '♪',  label: 'eighth note',            x: -38, y: -36, size: 22, color: '#1DB954', delay: 0.0,  mass: 0.2 },
-  { char: '♫',  label: 'beamed eighth notes',     x:  38, y: -32, size: 24, color: '#1ed760', delay: 0.5,  mass: 0.25 },
-  { char: '♬',  label: 'beamed sixteenth notes',  x: -48, y:  14, size: 22, color: '#1DB954', delay: 1.0,  mass: 0.3 },
-  { char: '♩',  label: 'quarter note',           x:  46, y:  18, size: 24, color: '#1ed760', delay: 1.5,  mass: 0.35 },
-  { char: '🎵', label: 'musical note emoji',     x: -24, y:  50, size: 22, color: '#1DB954', delay: 2.0,  mass: 0.4 },
-  { char: '🎶', label: 'multiple notes emoji',   x:  28, y:  52, size: 24, color: '#1ed760', delay: 2.5,  mass: 0.45 },
-];
-
 /* ─── Core Technical Capabilities ───────────────────────────── */
 export const CAPABILITIES = [
   { icon: '🔒', label: 'PKCE 2.0 Security' },

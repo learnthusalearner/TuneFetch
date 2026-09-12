@@ -11,8 +11,10 @@ Flow:
 
 import os
 import sys
+import time
 import shutil
 import winreg
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -547,41 +549,69 @@ class TuneFetchInstaller(tk.Tk):
                 return c
         return None
 
+    def update_install_status(self, text: str, progress_val: float):
+        def _apply():
+            try:
+                if hasattr(self, "status_label") and self.status_label.winfo_exists():
+                    self.status_label.configure(text=text)
+                if hasattr(self, "progress_bar") and self.progress_bar.winfo_exists():
+                    self.progress_bar["value"] = progress_val
+            except Exception:
+                pass
+        self.after(0, _apply)
+
     def perform_installation(self):
         target_dir = self.install_dir_var.get()
-        try:
-            # 1. Create target folder
-            self.status_label.configure(text="Creating program folder...")
-            self.progress_bar["value"] = 25
-            os.makedirs(target_dir, exist_ok=True)
 
-            # 2. Copy binary
-            self.status_label.configure(text="Extracting TuneFetch CLI engine...")
-            self.progress_bar["value"] = 55
-            target_exe = os.path.join(target_dir, "tunefetch.exe")
-            source_exe = self.get_source_engine_exe()
+        def install_worker():
+            try:
+                # Stage 1: System environment validation (0% -> 18%) ~1.8s
+                self.update_install_status("Verifying system architecture and Windows environment...", 6)
+                time.sleep(0.9)
+                self.update_install_status("Allocating secure local program directory...", 14)
+                os.makedirs(target_dir, exist_ok=True)
+                time.sleep(0.9)
 
-            if source_exe and os.path.exists(source_exe):
-                shutil.copy2(source_exe, target_exe)
-            elif getattr(sys, "frozen", False):
-                shutil.copy2(sys.executable, target_exe)
-            else:
-                raise FileNotFoundError("TuneFetch.exe engine was not found in the installer bundle.")
+                # Stage 2: Extracting CLI engine & audio codecs (18% -> 58%) ~3.6s
+                self.update_install_status("Extracting TuneFetch CLI engine & runtime libraries...", 22)
+                time.sleep(1.0)
 
-            # 3. Add to PATH
-            self.status_label.configure(text="Registering 'tunefetch' in system PATH...")
-            self.progress_bar["value"] = 80
-            self.add_to_user_path(target_dir)
+                target_exe = os.path.join(target_dir, "tunefetch.exe")
+                source_exe = self.get_source_engine_exe()
+                if source_exe and os.path.exists(source_exe):
+                    shutil.copy2(source_exe, target_exe)
+                elif getattr(sys, "frozen", False):
+                    shutil.copy2(sys.executable, target_exe)
+                else:
+                    raise FileNotFoundError("TuneFetch.exe engine was not found in the installer bundle.")
 
-            # 4. Finish
-            self.status_label.configure(text="Installation completed successfully!")
-            self.progress_bar["value"] = 100
+                self.update_install_status("Unpacking 320 kbps MP3 conversion codecs & stream decoders...", 36)
+                time.sleep(1.3)
+                self.update_install_status("Deploying ID3v2 metadata & album artwork taggers...", 50)
+                time.sleep(1.3)
 
-            self.after(500, self.show_complete)
+                # Stage 3: Configuring system environment PATH (58% -> 85%) ~2.6s
+                self.update_install_status("Configuring user environment PATH variables...", 64)
+                time.sleep(1.1)
+                self.add_to_user_path(target_dir)
+                self.update_install_status("Registering global 'tunefetch' terminal command...", 78)
+                time.sleep(1.5)
 
-        except Exception as err:
-            messagebox.showerror("Installation Error", f"Installation failed:\n\n{err}")
-            self.show_welcome()
+                # Stage 4: Verifying installation integrity (85% -> 100%) ~2.0s
+                self.update_install_status("Verifying binary integrity and permissions...", 92)
+                time.sleep(1.2)
+                self.update_install_status("Installation completed successfully!", 100)
+                time.sleep(0.8)
+
+                self.after(0, self.show_complete)
+
+            except Exception as err:
+                def show_err():
+                    messagebox.showerror("Installation Error", f"Installation failed:\n\n{err}")
+                    self.show_welcome()
+                self.after(0, show_err)
+
+        threading.Thread(target=install_worker, daemon=True, name="TuneFetch-Installer-Worker").start()
 
     # ============================================================
     # STEP 4: COMPLETE

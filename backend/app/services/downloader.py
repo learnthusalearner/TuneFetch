@@ -639,33 +639,33 @@ class DownloadManager:
 
         last_update_time = [time.time()]
         last_downloaded_bytes = [0]
+        current_speed_str = ["0 KB/s"]
+        current_eta_str = ["--"]
 
         def on_progress(stream, chunk, bytes_remaining):
             with tasks_lock:
                 if task_id not in tasks:
                     return
 
-            total_size = stream.filesize or 0
+            total_size = stream.filesize or getattr(stream, "filesize_approx", 0) or 0
             if total_size > 0:
                 downloaded = total_size - bytes_remaining
                 percent = round((downloaded / total_size) * 100, 1)
 
                 now = time.time()
                 time_diff = now - last_update_time[0]
-                speed_str = "N/A"
-                eta_str = "--"
 
-                if time_diff >= 0.5:
+                if time_diff >= 0.4:
                     bytes_diff = downloaded - last_downloaded_bytes[0]
                     speed_bps = bytes_diff / time_diff if time_diff > 0 else 0
                     if speed_bps > 1024 * 1024:
-                        speed_str = f"{speed_bps / (1024 * 1024):.1f} MB/s"
-                    else:
-                        speed_str = f"{speed_bps / 1024:.0f} KB/s"
+                        current_speed_str[0] = f"{speed_bps / (1024 * 1024):.1f} MB/s"
+                    elif speed_bps > 0:
+                        current_speed_str[0] = f"{speed_bps / 1024:.0f} KB/s"
 
-                    if speed_bps > 0:
+                    if speed_bps > 0 and bytes_remaining > 0:
                         eta_seconds = int(bytes_remaining / speed_bps)
-                        eta_str = f"{eta_seconds}s"
+                        current_eta_str[0] = f"{eta_seconds}s"
 
                     last_update_time[0] = now
                     last_downloaded_bytes[0] = downloaded
@@ -673,9 +673,9 @@ class DownloadManager:
                 with tasks_lock:
                     if task_id in tasks:
                         tasks[task_id]["status"] = "downloading"
-                        tasks[task_id]["progress"] = min(98.0, percent)
-                        tasks[task_id]["speed"] = speed_str
-                        tasks[task_id]["eta"] = eta_str
+                        tasks[task_id]["progress"] = min(98.0, max(0.5, percent))
+                        tasks[task_id]["speed"] = current_speed_str[0]
+                        tasks[task_id]["eta"] = current_eta_str[0]
 
         raw_temp_filepath = None
         final_mp3_filepath = None

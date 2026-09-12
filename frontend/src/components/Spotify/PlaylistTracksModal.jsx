@@ -23,34 +23,8 @@ export default function PlaylistTracksModal({
   const [cloudSessionCode, setCloudSessionCode] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
-  const [liveBatchStatus, setLiveBatchStatus] = useState(null);
-
-  // Poll local desktop engine for live progress if session modal is open
-  React.useEffect(() => {
-    if (!showSessionModal || !cloudSessionCode) {
-      setLiveBatchStatus(null);
-      return;
-    }
-
-    let active = true;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`http://127.0.0.1:8000/api/local/progress/${cloudSessionCode}`, { mode: 'cors' });
-        if (res.ok) {
-          const data = await res.json();
-          if (active && data?.batch) {
-            setLiveBatchStatus(data.batch);
-          }
-        }
-      } catch {}
-    }, 750);
-
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [showSessionModal, cloudSessionCode]);
 
   if (!isOpen) return null;
 
@@ -111,19 +85,6 @@ export default function PlaylistTracksModal({
     const targetTracks = getActiveTrackList();
 
     try {
-      // 1. Check if TuneFetch Desktop is open on localhost:8000
-      const desktop = await api.checkLocalDesktopStatus();
-      if (desktop.isRunning) {
-        await api.sendToLocalDesktop({
-          playlist_name: playlist?.name || 'Spotify Playlist',
-          tracks: targetTracks,
-          format: selectedFormat
-        });
-        setDesktopSuccessMsg(`⚡ Successfully sent ${targetTracks.length} tracks to TuneFetch Desktop! Files are downloading one by one to your PC's 'Downloads/Thanks for downloading' folder.`);
-        return;
-      }
-
-      // 2. If desktop not directly responding via fetch, generate cloud session code (resolved via PostgreSQL)
       const sessionData = await api.createCloudSession({
         playlist_name: playlist?.name || 'Spotify Playlist',
         image: playlist?.image || '',
@@ -132,18 +93,7 @@ export default function PlaylistTracksModal({
       setCloudSessionCode(sessionData.session_code);
       setShowSessionModal(true);
     } catch (err) {
-      console.warn('Local desktop check failed, generating session code:', err);
-      try {
-        const sessionData = await api.createCloudSession({
-          playlist_name: playlist?.name || 'Spotify Playlist',
-          image: playlist?.image || '',
-          tracks: targetTracks
-        });
-        setCloudSessionCode(sessionData.session_code);
-        setShowSessionModal(true);
-      } catch (err2) {
-        alert('Could not start download: ' + (err2.message || err.message));
-      }
+      alert('Could not start download: ' + (err.message || 'Failed to create session code.'));
     } finally {
       setIsDispatchingDesktop(false);
     }
@@ -154,6 +104,13 @@ export default function PlaylistTracksModal({
     navigator.clipboard.writeText(cloudSessionCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
+  };
+
+  const handleCopyCommand = () => {
+    if (!cloudSessionCode) return;
+    navigator.clipboard.writeText(`tunefetch ${cloudSessionCode}`);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 2500);
   };
 
   const handleCopyJson = () => {
@@ -672,41 +629,6 @@ export default function PlaylistTracksModal({
               </button>
             </div>
 
-            {/* Live Synchronized Progress Banner if Desktop Engine is Active */}
-            {liveBatchStatus && (
-              <div
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  background: 'rgba(29, 185, 84, 0.12)',
-                  border: '1px solid rgba(29, 185, 84, 0.35)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1DB954', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    ● LIVE DOWNLOADING ON LOCAL PC
-                  </span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#1DB954' }}>
-                    {liveBatchStatus.overall_progress || 0}%
-                  </span>
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>
-                  {liveBatchStatus.current_track_title || 'Downloading songs...'}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#cbd5e1' }}>
-                  <span>Completed: <strong>{liveBatchStatus.completed_tracks || 0} / {liveBatchStatus.total_tracks || 0}</strong></span>
-                  <span>Speed: <strong style={{ color: '#fbbf24' }}>{liveBatchStatus.current_track_speed || '0 KB/s'}</strong></span>
-                  <span>ETA: <strong style={{ color: '#60a5fa' }}>~{Math.round(liveBatchStatus.estimated_remaining_seconds || 0)}s</strong></span>
-                </div>
-                <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-                  <div style={{ width: `${liveBatchStatus.overall_progress || 0}%`, height: '100%', background: '#1DB954', transition: 'width 0.3s' }} />
-                </div>
-              </div>
-            )}
-
             {/* Steps */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
@@ -762,29 +684,47 @@ export default function PlaylistTracksModal({
               🛡️ <strong>Windows SmartScreen Note:</strong> If Windows shows <em>"Protected your PC / Unknown Publisher"</em>, click <strong>"More info"</strong> → <strong>"Run anyway"</strong> (TuneFetch is 100% free open-source software).
             </div>
 
-            {/* 1-Click Launch Local Engine */}
-            <a
-              href={`http://127.0.0.1:8000/?session=${cloudSessionCode}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            {/* Terminal Command Quick Copy */}
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '10px 16px',
+                justifyContent: 'space-between',
+                gap: '10px',
+                padding: '11px 16px',
                 borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
-                fontSize: '13px',
-                fontWeight: 700,
-                textDecoration: 'none'
+                background: 'rgba(0, 0, 0, 0.45)',
+                border: '1px solid rgba(255, 255, 255, 0.12)'
               }}
             >
-              <ExternalLink size={15} />
-              <span>Open Local Engine &amp; Download (http://127.0.0.1:8000)</span>
-            </a>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Terminal Command:</span>
+                <code style={{ fontSize: '13px', color: '#10b981', fontWeight: 700, letterSpacing: '0.5px' }}>
+                  tunefetch {cloudSessionCode}
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyCommand}
+                style={{
+                  background: copiedCommand ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  color: copiedCommand ? '#6ee7b7' : '#fff',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {copiedCommand ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copiedCommand ? 'Copied!' : 'Copy Command'}</span>
+              </button>
+            </div>
 
             {/* Alternative Copy JSON Button */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>

@@ -36,7 +36,8 @@ def _report_broken_track_to_backend(song_name: str, artist_name: str, error_msg:
 
     try:
         import httpx
-        prod_url = "https://tune-fetch-production.up.railway.app/spotify/tracks/report-broken"
+        cloud_url = os.getenv("TUNEFETCH_CLOUD_API_URL", os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com")).rstrip("/")
+        prod_url = f"{cloud_url}/spotify/tracks/report-broken"
         httpx.post(
             prod_url,
             json={"song_name": song_name, "artist_name": artist_name, "error_message": error_msg},
@@ -229,7 +230,7 @@ class LocalBatchDownloader:
                         finished = True
                         break
 
-                    time.sleep(0.4)
+                    time.sleep(0.2)
 
                 if not finished:
                     _report_broken_track_to_backend(song_name, artist_name, "Download timeout after 3 minutes")
@@ -269,6 +270,10 @@ class LocalBatchDownloader:
                 return None
             data = dict(batch)
             data["tracks_progress"] = [dict(t) for t in batch.get("tracks_progress", [])]
+            # Provide standard aliases for launcher and API callers
+            data["tracks"] = data["tracks_progress"]
+            data["successful_tracks"] = data.get("completed_tracks", 0)
+            data["current_speed"] = data.get("current_track_speed", "0 KB/s")
             
             if data.get("start_time"):
                 if data.get("status") == "DOWNLOADING":

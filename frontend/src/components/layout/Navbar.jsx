@@ -1,15 +1,13 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Music, History, CheckCircle2, AlertCircle, Home, LogOut, Download } from 'lucide-react';
+import { Music, Home, LogOut, Download } from 'lucide-react';
 import { api } from '../../services/api';
 
 /**
  * Navbar — top bar used inside DashboardPage.
- * Shows brand logo, health status pill, optional Spotify user avatar, and history button.
+ * Shows brand logo, navigation links, and Spotify user avatar.
  */
-export default function Navbar({ health, onToggleHistory, historyCount, spotifyUser, onGoHome, onLogout }) {
-  const isOnline   = health?.status === 'healthy';
-  const hasFfmpeg  = health?.ffmpeg_available;
+export default function Navbar({ spotifyUser, onGoHome, onLogout }) {
 
   const initials = spotifyUser?.display_name
     ? spotifyUser.display_name.slice(0, 2).toUpperCase()
@@ -51,57 +49,7 @@ export default function Navbar({ health, onToggleHistory, historyCount, spotifyU
             <span>Landing Page</span>
           </button>
         )}
-        {/* Engine health pill */}
-        <div
-          className="badge-tag"
-          style={{
-            background: isOnline ? 'rgba(29,185,84,0.1)'  : 'rgba(240,71,71,0.1)',
-            color:      isOnline ? 'var(--accent-green-bright)' : '#fda4af',
-            border: `1px solid ${isOnline ? 'rgba(29,185,84,0.25)' : 'rgba(240,71,71,0.25)'}`,
-            padding: '6px 12px',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-          title={
-            isOnline
-              ? hasFfmpeg ? 'Engine Ready (FFmpeg active)' : 'Backend Ready'
-              : 'Backend offline'
-          }
-        >
-          {isOnline
-            ? <CheckCircle2 size={13} />
-            : <AlertCircle  size={13} />}
-          <span style={{ fontSize: '11px', fontWeight: 700 }}>
-            {isOnline ? (hasFfmpeg ? 'MP3 Engine' : 'Online') : 'Offline'}
-          </span>
-        </div>
 
-        {/* History button */}
-        <button
-          id="history-btn"
-          className="icon-btn"
-          onClick={onToggleHistory}
-          title="View download history"
-        >
-          <History size={16} />
-          <span>History</span>
-          {historyCount > 0 && (
-            <span
-              style={{
-                background: 'var(--accent-green)',
-                color: '#000',
-                borderRadius: '50%',
-                padding: '1px 6px',
-                fontSize: '10px',
-                fontWeight: 800,
-              }}
-            >
-              {historyCount}
-            </span>
-          )}
-        </button>
 
         {/* Spotify user avatar & Switch/Logout button */}
         {spotifyUser && (

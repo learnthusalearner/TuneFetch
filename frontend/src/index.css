@@ -894,13 +894,7 @@ body {
   animation: vinylSpin 8s linear infinite;
 }
 
-/* ─── Spotify Musical Cursor & Hide Default Cursor ─── */
-@media (hover: hover) and (pointer: fine) {
-  .landing-root,
-  .landing-root * {
-    cursor: none !important;
-  }
-}
+
 
 /* ─── Hero 4-Card Showcase Grid (Side-by-side on desktop, 2x2 on tablet) ─── */
 .hero-showcase-grid {

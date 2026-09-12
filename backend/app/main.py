@@ -14,6 +14,7 @@ from app.routes.spotify import router as spotify_router
 from app.routes.cloud_session import router as cloud_session_router
 from app.core.config import APP_TITLE, APP_DESCRIPTION, APP_VERSION, CORS_ORIGINS, BASE_DIR
 from app.core.database import init_db
+from app.core.rate_limiter import RateLimitMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,8 +74,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition", "X-User-Id", "x-user-id"]
+        expose_headers=["Content-Disposition", "X-User-Id", "x-user-id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"]
     )
+
+    # In-memory sliding window rate limiter
+    app.add_middleware(RateLimitMiddleware)
 
     @app.middleware("http")
     async def add_private_network_headers(request: Request, call_next):
