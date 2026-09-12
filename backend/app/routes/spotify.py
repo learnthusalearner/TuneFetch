@@ -306,14 +306,6 @@ def download_playlist_zip(
     if not download_name.lower().endswith(".zip"):
         download_name = f"{download_name}.zip"
 
-    # Ensure user's ephemeral cookies are permanently purged upon ZIP delivery
-    if job.user_id:
-        try:
-            from app.services.user_cookie_store import UserCookieStore
-            UserCookieStore.delete_cookies(job.user_id)
-        except Exception:
-            pass
-
     return FileResponse(
         path=job.zip_path,
         filename=download_name,

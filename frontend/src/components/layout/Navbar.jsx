@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Music, History, CheckCircle2, AlertCircle, Home, Cookie } from 'lucide-react';
+import { Music, History, CheckCircle2, AlertCircle, Home } from 'lucide-react';
 
 /**
  * Navbar — top bar used inside DashboardPage.
- * Shows brand logo, health status pill, YouTube cookie button, optional Spotify user avatar, and history button.
+ * Shows brand logo, health status pill, optional Spotify user avatar, and history button.
  */
-export default function Navbar({ health, onToggleHistory, historyCount, spotifyUser, onGoHome, onOpenCookies, cookieStatus }) {
+export default function Navbar({ health, onToggleHistory, historyCount, spotifyUser, onGoHome }) {
   const isOnline   = health?.status === 'healthy';
   const hasFfmpeg  = health?.ffmpeg_available;
 
@@ -76,25 +76,6 @@ export default function Navbar({ health, onToggleHistory, historyCount, spotifyU
             {isOnline ? (hasFfmpeg ? 'MP3 Engine' : 'Online') : 'Offline'}
           </span>
         </div>
-
-        {/* YouTube Cookies button (always accessible) */}
-        {onOpenCookies && (
-          <button
-            id="navbar-cookies-btn"
-            className="icon-btn"
-            onClick={onOpenCookies}
-            title={cookieStatus?.has_cookies ? `YouTube Cookies Active (${cookieStatus.count}) - Auto-deleted after download` : 'Paste YouTube cookies.txt to ensure 100% verified production downloads'}
-            style={{
-              background: cookieStatus?.has_cookies ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-              borderColor: cookieStatus?.has_cookies ? 'rgba(52, 211, 153, 0.4)' : 'rgba(234, 179, 8, 0.4)',
-              color: cookieStatus?.has_cookies ? '#6ee7b7' : '#fde047',
-              fontWeight: 600,
-            }}
-          >
-            <Cookie size={16} />
-            <span>{cookieStatus?.has_cookies ? `Cookies (${cookieStatus.count})` : 'Paste cookies.txt'}</span>
-          </button>
-        )}
 
         {/* History button */}
         <button

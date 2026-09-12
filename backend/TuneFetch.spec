@@ -50,7 +50,6 @@ hiddenimports = [
     'app.routes.cloud_session',
     'app.services',
     'app.services.downloader',
-    'app.services.user_cookie_store',
     'app.services.spotify_service',
     'app.services.playlist_pipeline',
     'app.services.serper_service',

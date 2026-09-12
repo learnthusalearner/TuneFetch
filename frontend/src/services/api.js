@@ -305,51 +305,6 @@ export const api = {
     return `${SPOTIFY_BASE}/jobs/${jobId}/zip${query}`;
   },
 
-  // ==================== YOUTUBE VERIFICATION COOKIES API ====================
-
-  /**
-   * Saves ephemeral user cookies for download authentication
-   */
-  async saveUserCookies(cookies) {
-    const res = await secureFetch(`${API_BASE}/user-cookies`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookies })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || 'Failed to save cookies.');
-    }
-    return data;
-  },
-
-  /**
-   * Checks whether the current user has active ephemeral cookies
-   */
-  async getUserCookieStatus() {
-    try {
-      const res = await secureFetch(`${API_BASE}/user-cookies/status`);
-      if (!res.ok) return { has_cookies: false, count: 0 };
-      return await res.json();
-    } catch {
-      return { has_cookies: false, count: 0 };
-    }
-  },
-
-  /**
-   * Manually deletes temporary user cookies from server memory
-   */
-  async clearUserCookies() {
-    try {
-      const res = await secureFetch(`${API_BASE}/user-cookies`, {
-        method: 'DELETE'
-      });
-      return await res.json();
-    } catch {
-      return { success: false };
-    }
-  },
-
   // ==================== CLOUD SESSION & LOCAL DESKTOP HANDOFF API ====================
 
   /**

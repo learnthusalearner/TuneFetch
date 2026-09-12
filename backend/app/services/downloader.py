@@ -17,8 +17,7 @@ from app.core.config import (
     DEFAULT_BITRATE,
     MAX_CONCURRENT_DOWNLOADS,
     MAX_TASK_HISTORY,
-    CLEANUP_INTERVAL_SECONDS,
-    ROTATING_PROXY_URL
+    CLEANUP_INTERVAL_SECONDS
 )
 from app.utils.ffmpeg_helper import get_ffmpeg_path
 from app.utils.sanitizer import sanitize_filename
@@ -274,29 +273,20 @@ def get_cookie_file() -> Optional[str]:
             return target_path
     return None
 
-def configure_urllib_network(use_proxy: bool = False, custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None):
+def configure_urllib_network(custom_cookies: Optional[http.cookiejar.MozillaCookieJar] = None):
     """
-    Configures urllib opener dynamically.
-    Avoids permanently hijacking urllib when a proxy returns 407 authentication errors.
-    Prioritizes user session custom_cookies if provided.
+    Configures urllib opener dynamically with cookie support.
     """
     handlers = []
     cookie_jar = custom_cookies or get_cookie_jar()
     if cookie_jar:
         handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
 
-    if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
-        proxy_dict = {
-            "http": ROTATING_PROXY_URL.strip(),
-            "https": ROTATING_PROXY_URL.strip()
-        }
-        handlers.append(urllib.request.ProxyHandler(proxy_dict))
-
     opener = urllib.request.build_opener(*handlers)
     urllib.request.install_opener(opener)
 
-# Initialize standard opener without forcing proxy globally
-configure_urllib_network(use_proxy=False)
+# Initialize standard opener
+configure_urllib_network()
 
 CLIENT_FALLBACK_ORDER = ["VISION_OS", "MWEB", "WEB", "IOS", "ANDROID_VR"]
 
@@ -309,8 +299,6 @@ def build_pytubefix_instance(
 ) -> YouTube:
     """
     Constructs a pytubefix YouTube object.
-    Urllib opener is dynamically configured with cookies and proxies in configure_urllib_network
-    to prevent install_proxy from stripping the HTTPCookieProcessor.
     Supports botGuard PO tokens when needed for web clients.
     """
     verifier = None
@@ -337,21 +325,11 @@ def fetch_youtube_with_fallback(
     Tries multiple client profiles in sequence until a valid audio stream is found.
     Prioritizes VISION_OS (zero bot detection, require_po_token=False, 128kbps AAC) followed by
     MWEB, WEB, IOS, and ANDROID_VR.
-    Attempts with configured proxy first; if proxy fails (e.g. 407 / auth / network), falls back gracefully to direct.
-    Accepts user session custom_cookies for temporary authenticated download execution.
     Returns (yt_instance, best_audio_stream).
     Raises RuntimeError if all clients fail.
     """
     last_err = None
-    cookie_jar = custom_cookies
-    if not cookie_jar:
-        try:
-            from app.services.user_cookie_store import UserCookieStore
-            cookie_jar = UserCookieStore.get_latest_cookies()
-        except Exception:
-            pass
-    if not cookie_jar:
-        cookie_jar = get_cookie_jar()
+    cookie_jar = custom_cookies or get_cookie_jar()
 
     # Pre-generate botGuard PO token for web clients fallback if needed
     po_token = None
@@ -363,46 +341,37 @@ def fetch_youtube_with_fallback(
     except Exception:
         po_token = None
 
-    # Try with proxy (if configured), then direct if proxy throws an auth/network failure
-    proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
+    configure_urllib_network(custom_cookies=cookie_jar)
+    for client_name in CLIENT_FALLBACK_ORDER:
+        try:
+            yt = build_pytubefix_instance(
+                url=url,
+                client=client_name,
+                on_progress_callback=on_progress_callback,
+                on_complete_callback=on_complete_callback,
+                po_token=po_token if client_name in ["MWEB", "WEB"] else None
+            )
 
-    for use_proxy in proxy_attempts:
-        configure_urllib_network(use_proxy=use_proxy, custom_cookies=cookie_jar)
-        for client_name in CLIENT_FALLBACK_ORDER:
-            try:
-                yt = build_pytubefix_instance(
-                    url=url,
-                    client=client_name,
-                    on_progress_callback=on_progress_callback,
-                    on_complete_callback=on_complete_callback,
-                    po_token=po_token if client_name in ["MWEB", "WEB"] else None
-                )
+            # Accessing title forces basic metadata extraction
+            _ = yt.title
 
-                # Accessing title forces basic metadata extraction
-                _ = yt.title
+            # First priority: non-SABR audio streams for maximum download stability
+            all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+            non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+            if non_sabr_streams:
+                return yt, non_sabr_streams[0]
 
-                # First priority: non-SABR audio streams for maximum download stability
-                all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
-                non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
-                if non_sabr_streams:
-                    return yt, non_sabr_streams[0]
+            # Second priority: standard audio stream
+            stream = yt.streams.get_audio_only()
+            if stream:
+                return yt, stream
 
-                # Second priority: standard audio stream
-                stream = yt.streams.get_audio_only()
-                if stream:
-                    return yt, stream
+            if all_audio and len(all_audio) > 0:
+                return yt, all_audio.first()
+        except Exception as err:
+            last_err = err
+            logger.warning(f"Pytubefix client '{client_name}' failed for '{url}': {err}")
 
-                if all_audio and len(all_audio) > 0:
-                    return yt, all_audio.first()
-            except Exception as err:
-                last_err = err
-                logger.warning(f"Pytubefix client '{client_name}' (proxy={use_proxy}) failed for '{url}': {err}")
-                if use_proxy and "407" in str(err):
-                    logger.warning("Proxy returned 407 Proxy Authentication Required. Skipping proxy and switching immediately to direct connection.")
-                    break
-
-    # Ensure opener is reset to clean direct state
-    configure_urllib_network(use_proxy=False)
     raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
 class DownloadManager:
@@ -716,24 +685,8 @@ class DownloadManager:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "downloading"
 
-            # Resolve active cookies: explicit custom_cookies, or from UserCookieStore for user_id
-            active_cookies = custom_cookies
-            if not active_cookies and user_id:
-                try:
-                    from app.services.user_cookie_store import UserCookieStore
-                    active_cookies = UserCookieStore.get_cookies(user_id)
-                except Exception:
-                    pass
-
-            if not active_cookies:
-                try:
-                    from app.services.user_cookie_store import UserCookieStore
-                    active_cookies = UserCookieStore.get_latest_cookies()
-                except Exception:
-                    pass
-
-            if not active_cookies:
-                active_cookies = get_cookie_jar()
+            # Active cookies and direct network configuration
+            active_cookies = custom_cookies or get_cookie_jar()
 
             # 1 & 2. Fetch and download audio stream with multi-client resilience
             download_success = False
@@ -742,67 +695,60 @@ class DownloadManager:
             video_artist = custom_artist or ""
             thumbnail = ""
 
-            proxy_attempts = [True, False] if (ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip()) else [False]
-            for use_proxy in proxy_attempts:
-                configure_urllib_network(use_proxy=use_proxy, custom_cookies=active_cookies)
-                for client_name in CLIENT_FALLBACK_ORDER:
-                    try:
-                        yt = build_pytubefix_instance(
-                            url=target_url,
-                            client=client_name,
-                            on_progress_callback=on_progress
-                        )
-                        video_title = custom_title or yt.title or "Audio"
-                        video_artist = custom_artist or yt.author or ""
-                        thumbnail = yt.thumbnail_url or ""
+            configure_urllib_network(custom_cookies=active_cookies)
+            for client_name in CLIENT_FALLBACK_ORDER:
+                try:
+                    yt = build_pytubefix_instance(
+                        url=target_url,
+                        client=client_name,
+                        on_progress_callback=on_progress
+                    )
+                    video_title = custom_title or yt.title or "Audio"
+                    video_artist = custom_artist or yt.author or ""
+                    thumbnail = yt.thumbnail_url or ""
 
-                        all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
-                        audio_stream = None
-                        non_sabr = [s for s in all_audio if not getattr(s, "is_sabr", False)]
-                        if non_sabr:
-                            audio_stream = non_sabr[0]
-                        elif yt.streams.get_audio_only():
-                            audio_stream = yt.streams.get_audio_only()
-                        elif all_audio and len(all_audio) > 0:
-                            audio_stream = all_audio.first()
+                    all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+                    audio_stream = None
+                    non_sabr = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+                    if non_sabr:
+                        audio_stream = non_sabr[0]
+                    elif yt.streams.get_audio_only():
+                        audio_stream = yt.streams.get_audio_only()
+                    elif all_audio and len(all_audio) > 0:
+                        audio_stream = all_audio.first()
 
-                        if not audio_stream:
-                            continue
+                    if not audio_stream:
+                        continue
 
-                        stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
-                        temp_filename = f"{task_id}_raw.{stream_ext}"
-                        candidate_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
+                    stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
+                    temp_filename = f"{task_id}_raw.{stream_ext}"
+                    candidate_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
 
+                    if os.path.exists(candidate_filepath):
+                        try:
+                            os.remove(candidate_filepath)
+                        except Exception:
+                            pass
+
+                    audio_stream.download(
+                        output_path=DOWNLOADS_DIR,
+                        filename=temp_filename
+                    )
+
+                    if os.path.exists(candidate_filepath) and os.path.getsize(candidate_filepath) > 1024:
+                        raw_temp_filepath = candidate_filepath
+                        download_success = True
+                        break
+                    else:
                         if os.path.exists(candidate_filepath):
                             try:
                                 os.remove(candidate_filepath)
                             except Exception:
                                 pass
-
-                        audio_stream.download(
-                            output_path=DOWNLOADS_DIR,
-                            filename=temp_filename
-                        )
-
-                        if os.path.exists(candidate_filepath) and os.path.getsize(candidate_filepath) > 1024:
-                            raw_temp_filepath = candidate_filepath
-                            download_success = True
-                            break
-                        else:
-                            if os.path.exists(candidate_filepath):
-                                try:
-                                    os.remove(candidate_filepath)
-                                except Exception:
-                                    pass
-                            logger.warning(f"Client '{client_name}' stream download was empty or corrupted (<1KB).")
-                    except Exception as client_err:
-                        last_err = client_err
-                        logger.warning(f"Download with client '{client_name}' (proxy={use_proxy}) failed: {client_err}")
-                        if use_proxy and "407" in str(client_err):
-                            break
-
-                if download_success:
-                    break
+                        logger.warning(f"Client '{client_name}' stream download was empty or corrupted (<1KB).")
+                except Exception as client_err:
+                    last_err = client_err
+                    logger.warning(f"Download with client '{client_name}' failed: {client_err}")
 
             if not download_success or not raw_temp_filepath or not os.path.exists(raw_temp_filepath):
                 raise RuntimeError(f"Could not extract audio stream across clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
@@ -884,8 +830,8 @@ class DownloadManager:
             err_msg = str(e)
             if "bot" in err_msg.lower() or "429" in err_msg:
                 err_msg = (
-                    f"YouTube requested bot verification or rate-limited this request ({err_msg}). "
-                    "Configuring YOUTUBE_COOKIES or ROTATING_PROXY_URL will automatically bypass this limit."
+                    f"YouTube requested bot verification ({err_msg}). "
+                    "Please download using the TuneFetch desktop application on your local computer."
                 )
 
             with tasks_lock:

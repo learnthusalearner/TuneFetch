@@ -13,61 +13,6 @@ from app.utils.sanitizer import build_content_disposition_header
 
 router = APIRouter(prefix="/api", tags=["Media"])
 
-class UserCookiePayload(BaseModel):
-    cookies: str
-
-@router.post("/user-cookies")
-def set_user_cookies(
-    payload: UserCookiePayload,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Saves user-provided YouTube verification cookies in ephemeral server memory.
-    Cookies are held ONLY while downloads are processed and deleted once all songs are downloaded.
-    """
-    raw_cookies = payload.cookies or ""
-    if not raw_cookies.strip():
-        raise HTTPException(status_code=400, detail="Cookies content cannot be empty.")
-
-    from app.services.user_cookie_store import UserCookieStore
-    count = UserCookieStore.set_cookies(current_user.id, raw_cookies)
-    if count == 0:
-        raise HTTPException(status_code=400, detail="Could not parse any valid cookies. Please verify the format.")
-
-    return {
-        "success": True,
-        "count": count,
-        "message": f"Successfully loaded {count} cookies. They will be automatically deleted once your downloads finish."
-    }
-
-@router.get("/user-cookies/status")
-def get_user_cookies_status(
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Returns whether the current user has active ephemeral cookies in memory.
-    """
-    from app.services.user_cookie_store import UserCookieStore
-    has_cookies = UserCookieStore.has_cookies(current_user.id)
-    count = UserCookieStore.get_cookie_count(current_user.id)
-    return {
-        "has_cookies": has_cookies,
-        "count": count
-    }
-
-@router.delete("/user-cookies")
-def delete_user_cookies(
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Manually purges the user's cookies from server memory.
-    """
-    from app.services.user_cookie_store import UserCookieStore
-    deleted = UserCookieStore.delete_cookies(current_user.id)
-    return {
-        "success": True,
-        "deleted": deleted
-    }
 
 @router.post("/info")
 def fetch_info(
