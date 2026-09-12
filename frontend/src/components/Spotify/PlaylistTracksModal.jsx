@@ -24,6 +24,33 @@ export default function PlaylistTracksModal({
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [liveBatchStatus, setLiveBatchStatus] = useState(null);
+
+  // Poll local desktop engine for live progress if session modal is open
+  React.useEffect(() => {
+    if (!showSessionModal || !cloudSessionCode) {
+      setLiveBatchStatus(null);
+      return;
+    }
+
+    let active = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/local/progress/${cloudSessionCode}`, { mode: 'cors' });
+        if (res.ok) {
+          const data = await res.json();
+          if (active && data?.batch) {
+            setLiveBatchStatus(data.batch);
+          }
+        }
+      } catch {}
+    }, 750);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [showSessionModal, cloudSessionCode]);
 
   if (!isOpen) return null;
 
@@ -652,6 +679,41 @@ export default function PlaylistTracksModal({
                 <span>{copiedCode ? 'Copied Code!' : 'Copy Code'}</span>
               </button>
             </div>
+
+            {/* Live Synchronized Progress Banner if Desktop Engine is Active */}
+            {liveBatchStatus && (
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: '12px',
+                  background: 'rgba(29, 185, 84, 0.12)',
+                  border: '1px solid rgba(29, 185, 84, 0.35)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1DB954', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    ● LIVE DOWNLOADING ON LOCAL PC
+                  </span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#1DB954' }}>
+                    {liveBatchStatus.overall_progress || 0}%
+                  </span>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>
+                  {liveBatchStatus.current_track_title || 'Downloading songs...'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#cbd5e1' }}>
+                  <span>Completed: <strong>{liveBatchStatus.completed_tracks || 0} / {liveBatchStatus.total_tracks || 0}</strong></span>
+                  <span>Speed: <strong style={{ color: '#fbbf24' }}>{liveBatchStatus.current_track_speed || '0 KB/s'}</strong></span>
+                  <span>ETA: <strong style={{ color: '#60a5fa' }}>~{Math.round(liveBatchStatus.estimated_remaining_seconds || 0)}s</strong></span>
+                </div>
+                <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                  <div style={{ width: `${liveBatchStatus.overall_progress || 0}%`, height: '100%', background: '#1DB954', transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            )}
 
             {/* Steps */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>
