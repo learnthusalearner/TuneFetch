@@ -415,6 +415,19 @@ export const api = {
       throw new Error(data.detail || 'Failed to fetch local download progress.');
     }
     return data.batch;
+  },
+
+  /**
+   * Triggers Windows File Explorer to open Downloads/Thanks for downloading
+   */
+  async openLocalFolder() {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/local/open-folder', { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      console.warn('Could not open local folder:', e);
+      return { success: false };
+    }
   }
 };
 

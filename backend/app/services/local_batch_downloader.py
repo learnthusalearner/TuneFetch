@@ -53,6 +53,9 @@ class LocalBatchDownloader:
                 "current_track_title": "",
                 "current_index": 0,
                 "created_at": time.time(),
+                "start_time": time.time(),
+                "elapsed_seconds": 0,
+                "estimated_remaining_seconds": len(tracks) * 12,
                 "tracks_progress": [],
                 "error": None,
             }
@@ -181,4 +184,26 @@ class LocalBatchDownloader:
     @classmethod
     def get_batch_status(cls, batch_id: str) -> Optional[Dict[str, Any]]:
         with _local_batches_lock:
-            return _local_batches.get(batch_id)
+            batch = _local_batches.get(batch_id)
+            if not batch:
+                return None
+            data = dict(batch)
+            if data.get("start_time"):
+                if data.get("status") == "DOWNLOADING":
+                    elapsed = max(0, time.time() - data["start_time"])
+                    data["elapsed_seconds"] = round(elapsed, 1)
+                    completed = data.get("completed_tracks", 0)
+                    total = data.get("total_tracks", 0)
+                    remaining = max(0, total - completed)
+                    if completed > 0:
+                        avg_per_track = elapsed / completed
+                        data["estimated_remaining_seconds"] = round(avg_per_track * remaining)
+                        data["seconds_per_track"] = round(avg_per_track, 1)
+                    else:
+                        data["estimated_remaining_seconds"] = remaining * 12
+                        data["seconds_per_track"] = 12.0
+                elif data.get("status") == "COMPLETED":
+                    data["estimated_remaining_seconds"] = 0
+                    if not data.get("elapsed_seconds"):
+                        data["elapsed_seconds"] = round(time.time() - data["start_time"], 1)
+            return data

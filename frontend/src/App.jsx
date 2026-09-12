@@ -2,30 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
-import { api } from './services/api';
+import LocalDesktopPage from './pages/LocalDesktopPage';
+import { api, isLocalhost } from './services/api';
 
 /**
  * App — pure router.
- * Manages top-level routes:
- *   /          -> LandingPage
- *   /dashboard -> DashboardPage
+ * - On Localhost (Desktop Mode): Renders the ultra-clean LocalDesktopPage with live digital timer, ETA & folder manager.
+ * - On Production Web (Vercel): Renders LandingPage on '/' and DashboardPage on '/dashboard'.
+ *   Users can freely browse the landing page without being hijacked to OAuth!
  */
 export default function App() {
   const [spotifyStatus, setSpotifyStatus] = useState({ connected: false, spotify_user: null });
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Pre-fetch Spotify status and auto-route to dashboard if already connected
+  // Load Spotify status on mount without violent auto-navigation
   useEffect(() => {
     api.getSpotifyStatus().then((status) => {
       setSpotifyStatus(status);
-      if (status?.connected && location.pathname === '/') {
-        // User already connected Spotify! Jump straight to dashboard
-        navigate('/dashboard', { replace: true });
-      }
     }).catch(() => {});
 
-    // If redirected back from Spotify OAuth, jump straight to /dashboard
+    // Only redirect if explicitly returning from Spotify OAuth callback query
     const params = new URLSearchParams(window.location.search);
     if (params.get('spotify') === 'connected' || params.get('spotify_error')) {
       if (location.pathname !== '/dashboard') {
@@ -34,6 +31,16 @@ export default function App() {
     }
   }, [navigate, location.pathname]);
 
+  // When running locally on PC, show the dedicated desktop download interface
+  if (isLocalhost) {
+    return (
+      <Routes>
+        <Route path="*" element={<LocalDesktopPage />} />
+      </Routes>
+    );
+  }
+
+  // When running on production cloud website (Vercel)
   return (
     <Routes>
       <Route

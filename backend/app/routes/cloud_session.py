@@ -142,6 +142,29 @@ def get_local_desktop_status(response: Response):
         "downloads_dir": downloads_dir,
     }
 
+@router.post("/api/local/open-folder")
+def open_local_downloads_folder(response: Response):
+    """
+    Opens the 'Downloads/Thanks for downloading' folder in the local OS file explorer.
+    """
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    downloads_dir = os.environ.get("DOWNLOADS_DIR", str(Path.home() / "Downloads" / "Thanks for downloading"))
+    folder = Path(downloads_dir)
+    os.makedirs(folder, exist_ok=True)
+    try:
+        import sys, subprocess
+        if os.name == "nt":
+            os.startfile(str(folder))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(folder)])
+        else:
+            subprocess.Popen(["xdg-open", str(folder)])
+        return {"success": True, "folder": str(folder)}
+    except Exception as e:
+        logger.error(f"Could not open folder {folder}: {e}")
+        return {"success": False, "error": str(e), "folder": str(folder)}
+
 @router.post("/api/local/download")
 def start_local_download_batch(req: LocalDownloadRequest, response: Response):
     """
