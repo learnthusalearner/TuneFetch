@@ -735,6 +735,29 @@ export default function PlaylistTracksModal({
               </div>
             </div>
 
+            {/* Direct Download .exe installer button */}
+            <a
+              href={api.getInstallerDownloadUrl()}
+              download="TuneFetch_Setup.exe"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 18px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+                color: '#000',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                textDecoration: 'none',
+                boxShadow: '0 4px 20px rgba(29, 185, 84, 0.45)'
+              }}
+            >
+              <Download size={18} />
+              <span>Download TuneFetch Desktop Setup (.exe)</span>
+            </a>
+
             {/* 1-Click Launch Local Engine */}
             <a
               href={`http://127.0.0.1:8000/?session=${cloudSessionCode}`}
@@ -747,12 +770,12 @@ export default function PlaylistTracksModal({
                 gap: '8px',
                 padding: '10px 16px',
                 borderRadius: '8px',
-                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
                 color: '#fff',
                 fontSize: '13px',
                 fontWeight: 700,
-                textDecoration: 'none',
-                boxShadow: '0 4px 14px rgba(29, 185, 84, 0.35)'
+                textDecoration: 'none'
               }}
             >
               <ExternalLink size={15} />

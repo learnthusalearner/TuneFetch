@@ -41,3 +41,8 @@ Thumbs.db
 .vscode/
 .idea/
 .gemini/
+
+# Executables (TuneFetch CLI engine built dynamically; installer wizard committed)
+*.exe
+!backend/static/TuneFetch_Setup.exe
+

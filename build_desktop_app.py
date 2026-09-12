@@ -34,28 +34,49 @@ def main():
     if os.name == "nt":
         subprocess.run(["powershell", "-Command", "Stop-Process -Name TuneFetch -Force -ErrorAction SilentlyContinue"], capture_output=True)
 
-    # Step 4: Run PyInstaller
-    print("\n[4/4] Running PyInstaller...")
+    # Step 4: Run PyInstaller for TuneFetch Engine and Installer Wizard
+    print("\n[4/5] Running PyInstaller for TuneFetch CLI Engine...")
     
-    # The --add-data flag uses ';' on Windows and ':' on Unix
     separator = ";" if os.name == "nt" else ":"
     
-    pyinstaller_cmd = [
+    pyinstaller_cmd_engine = [
         sys.executable, "-m", "PyInstaller",
         "--name", "TuneFetch",
         "--onefile",
-        "--windowed", # Hides the console window (you can remove this if you want to see logs)
         "--add-data", f"frontend_dist{separator}frontend_dist",
         "--clean",
         "--distpath", str(dist_dir),
         str(backend_dir / "launcher.py")
     ]
+    subprocess.run(pyinstaller_cmd_engine, cwd=backend_dir, check=True)
+
+    print("\n[5/5] Running PyInstaller for TuneFetch Setup Wizard...")
+    pyinstaller_cmd_installer = [
+        sys.executable, "-m", "PyInstaller",
+        "--name", "TuneFetch_Setup",
+        "--onefile",
+        "--windowed",
+        "--clean",
+        "--distpath", str(dist_dir),
+        str(backend_dir / "installer_wizard.py")
+    ]
+    subprocess.run(pyinstaller_cmd_installer, cwd=backend_dir, check=True)
+
+    # Copy executables to backend/static so FastAPI serves them and Git commits them
+    static_dir = backend_dir / "static"
+    os.makedirs(static_dir, exist_ok=True)
     
-    subprocess.run(pyinstaller_cmd, cwd=backend_dir, check=True)
-    
+    if (dist_dir / "TuneFetch_Setup.exe").exists():
+        shutil.copy2(dist_dir / "TuneFetch_Setup.exe", static_dir / "TuneFetch_Setup.exe")
+    if (dist_dir / "TuneFetch.exe").exists():
+        shutil.copy2(dist_dir / "TuneFetch.exe", static_dir / "TuneFetch.exe")
+        shutil.copy2(dist_dir / "TuneFetch.exe", backend_dir / "TuneFetch.exe")
+
     print("\n=========================================")
-    print(f" Build Complete! You can find your app at: ")
-    print(f" {dist_dir / 'TuneFetch.exe'} ")
+    print(f" Build Complete! Apps generated at: ")
+    print(f" • {dist_dir / 'TuneFetch_Setup.exe'} (Installer Wizard)")
+    print(f" • {dist_dir / 'TuneFetch.exe'} (CLI Downloader Engine)")
+    print(f" • {static_dir / 'TuneFetch_Setup.exe'} (Static Downloadable Binary)")
     print("=========================================")
 
 if __name__ == "__main__":

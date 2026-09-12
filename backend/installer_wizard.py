@@ -1,6 +1,6 @@
 """
 TuneFetch Windows Setup Wizard (Installer)
-Provides an attractive 4-step Setup Wizard (Welcome -> Terms of Service -> Install -> Finish)
+Provides an attractive 4-step Setup Wizard (Welcome -> Terms of Service & Privacy -> Install -> Finish)
 Installs tunefetch.exe and automatically adds 'tunefetch' to the Windows User PATH.
 """
 import os
@@ -15,28 +15,37 @@ APP_VERSION = "1.3.0"
 DEFAULT_INSTALL_DIR = os.path.join(os.environ.get("LOCALAPPDATA", r"C:\Users\Public"), "Programs", "TuneFetch")
 
 TERMS_OF_SERVICE = """
-TUNEFETCH SOFTWARE LICENSE & TERMS OF SERVICE (v1.3.0)
+TUNEFETCH OPEN-SOURCE LICENSE & PRIVACY GUARANTEE (v1.3.0)
 
-1. ACCEPTANCE OF TERMS
-By installing and using TuneFetch Desktop, you agree to be bound by these terms. TuneFetch is provided for personal music downloading and archival purposes.
+1. 100% OPEN-SOURCE & FREE FOR EVERYONE
+TuneFetch is 100% free and open-source software under the MIT License. Anyone is free to use, inspect, share, or audit the complete codebase on GitHub (github.com/learnthusalearner/TuneFetch).
 
-2. PERSONAL USE ONLY
-TuneFetch is designed to enable users to download audio streams for offline listening and personal media organization. Users are responsible for complying with local copyright laws.
+2. POSTGRESQL DATABASE & SESSION METADATA TRACKING
+TuneFetch uses a secure PostgreSQL database to manage session metadata between the web app and desktop client:
+• Database Session Store: We store temporary 4-digit session codes (e.g. TF-8907), playlist titles, total track counts, and resolved YouTube candidate URLs to coordinate seamless sync.
+• Zero Personal Data: We DO NOT store your Spotify passwords, account credentials, or personal listening history.
+• Automatic Purge: All database session records and temporary download tokens are automatically deleted from the database after 24 hours.
 
-3. NO WARRANTY & FREEMIUM PRIVACY
-TuneFetch is provided "AS IS" without warranties of any kind. No personal data, passwords, or Spotify login credentials are ever collected or stored on our servers. All downloads are fetched at maximum 320 kbps MP3 quality directly onto your local machine.
+3. REAL-TIME LIVE DOWNLOAD FEEDBACK
+When running 'tunefetch TF-XXXX' in your command prompt, you will see:
+• Active Song Title & Artist
+• Real-time Download Percentage (% completion)
+• Live Download Speed (MB/s)
+• Estimated Time Remaining (ETA countdown)
 
-4. AUTOMATIC PATH REGISTRATION
-Installing TuneFetch adds the executable directory to your Windows User PATH environment variable so you can run 'tunefetch' from any Command Prompt or Terminal window.
+4. SOFTWARE BREAKDOWN & INSTALLATION ESTIMATE
+• What is installed: Single standalone 'tunefetch.exe' executable (~15 MB).
+• Setup Time: ~3 to 5 seconds (Instant fast installation).
+• Destination Folder: Downloads 320 kbps Ultra HQ MP3s directly into your 'Downloads/Thanks for downloading' folder.
 
-Click 'I Accept' below to proceed with the installation.
+Click 'I Accept' below to proceed with installation.
 """
 
 class TuneFetchInstaller(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME} v{APP_VERSION} Setup Wizard")
-        self.geometry("640x480")
+        self.geometry("640x510")
         self.resizable(False, False)
         self.configure(bg="#0b0f19")
 
@@ -49,7 +58,7 @@ class TuneFetchInstaller(tk.Tk):
         self.style.configure('TFrame', background='#0b0f19')
         self.style.configure('TLabel', background='#0b0f19', foreground='#ffffff', font=('Segoe UI', 10))
         self.style.configure('Header.TLabel', font=('Segoe UI', 16, 'bold'), foreground='#1DB954')
-        self.style.configure('Title.TLabel', font=('Segoe UI', 20, 'bold'), foreground='#ffffff')
+        self.style.configure('Title.TLabel', font=('Segoe UI', 19, 'bold'), foreground='#ffffff')
 
         self.container = ttk.Frame(self)
         self.container.pack(fill='both', expand=True, padx=24, pady=24)
@@ -60,27 +69,42 @@ class TuneFetchInstaller(tk.Tk):
         for widget in self.container.winfo_children():
             widget.destroy()
 
-    # STEP 1: WELCOME SCREEN
+    # STEP 1: WELCOME SCREEN & BREAKDOWN
     def show_step_1_welcome(self):
         self.clear_container()
 
         header = ttk.Label(self.container, text="♪ TuneFetch Setup Wizard", style='Header.TLabel')
-        header.pack(anchor='w', pady=(0, 5))
+        header.pack(anchor='w', pady=(0, 4))
 
         title = ttk.Label(self.container, text="Welcome to TuneFetch Downloader", style='Title.TLabel')
-        title.pack(anchor='w', pady=(0, 15))
+        title.pack(anchor='w', pady=(0, 12))
+
+        # Information Box
+        info_frame = tk.Frame(self.container, bg='#151d2a', bd=1, relief='solid', padx=16, pady=14)
+        info_frame.pack(fill='x', pady=(0, 16))
+
+        info_lbl = tk.Label(
+            info_frame,
+            text="⚡ QUICK INSTALLATION SUMMARY:\n\n"
+                 "• Software Installed:  TuneFetch CLI Engine (~15 MB)\n"
+                 "• Installation Time:   ~3 to 5 seconds\n"
+                 "• Downloads Saved To:  Downloads/Thanks for downloading\n"
+                 "• Audio Quality:       320 kbps Ultra HQ MP3 (Best Quality)\n"
+                 "• Real-Time Monitor:   Live percentage %, speed (MB/s), and ETA countdown\n"
+                 "• Session DB Storage:   Encrypted 24h cloud database session tokens for sync\n"
+                 "• Privacy Guarantee:   100% Open-Source. Zero user passwords or credentials stored.",
+            font=('Segoe UI', 9.5), bg='#151d2a', fg='#e2e8f0', justify='left'
+        )
+        info_lbl.pack(anchor='w')
 
         desc = ttk.Label(
             self.container,
-            text="This wizard will install TuneFetch High-Fidelity Audio Downloader on your computer.\n\n"
-                 "• Installs standalone CLI & Desktop Engine\n"
-                 "• Adds 'tunefetch' command to your Windows Command Prompt / Terminal\n"
-                 "• Automatically downloads 320 kbps Ultra HQ MP3 files directly into Downloads/Thanks for downloading\n\n"
-                 "Click Next to review the Terms of Service and proceed.",
+            text="Click Next to review the Open-Source License & Privacy Guarantee and proceed with installation.",
             wraplength=580,
-            justify='left'
+            justify='left',
+            font=('Segoe UI', 9.5)
         )
-        desc.pack(anchor='w', pady=(0, 30))
+        desc.pack(anchor='w', pady=(0, 20))
 
         btn_frame = ttk.Frame(self.container)
         btn_frame.pack(fill='x', side='bottom')
@@ -99,14 +123,14 @@ class TuneFetchInstaller(tk.Tk):
         )
         cancel_btn.pack(side='right', padx=10)
 
-    # STEP 2: TERMS OF SERVICE / LICENSE AGREEMENT
+    # STEP 2: TERMS OF SERVICE & PRIVACY GUARANTEE
     def show_step_2_terms(self):
         self.clear_container()
 
-        header = ttk.Label(self.container, text="License Agreement & Terms of Service", style='Header.TLabel')
-        header.pack(anchor='w', pady=(0, 5))
+        header = ttk.Label(self.container, text="Open-Source License & Privacy Policy", style='Header.TLabel')
+        header.pack(anchor='w', pady=(0, 4))
 
-        sub = ttk.Label(self.container, text="Please review the terms before installing TuneFetch.", font=('Segoe UI', 10))
+        sub = ttk.Label(self.container, text="Please review the privacy policy and open-source terms below.", font=('Segoe UI', 10))
         sub.pack(anchor='w', pady=(0, 10))
 
         text_frame = ttk.Frame(self.container)
@@ -125,7 +149,7 @@ class TuneFetchInstaller(tk.Tk):
         scrollbar.config(command=tos_box.yview)
 
         cb = tk.Checkbutton(
-            self.container, text="I accept the Terms of Service & License Agreement",
+            self.container, text="I accept the Open-Source Terms & Privacy Guarantee",
             variable=self.accepted_tos, bg='#0b0f19', fg='#ffffff',
             selectcolor='#151d2a', activebackground='#0b0f19', activeforeground='#ffffff',
             font=('Segoe UI', 10, 'bold')
@@ -152,7 +176,7 @@ class TuneFetchInstaller(tk.Tk):
 
     def validate_tos(self):
         if not self.accepted_tos.get():
-            messagebox.showwarning("Agreement Required", "Please check 'I accept the Terms of Service' to proceed.")
+            messagebox.showwarning("Agreement Required", "Please check 'I accept the Terms & Privacy Guarantee' to proceed.")
             return
         self.show_step_3_install()
 
@@ -233,7 +257,7 @@ class TuneFetchInstaller(tk.Tk):
             example_frame,
             text="HOW TO EXECUTE COMMANDS IN TERMINAL:\n\n"
                  "1. Open Command Prompt or PowerShell (cmd.exe)\n"
-                 "2. Copy session command from website:\n\n"
+                 "2. Copy your session command from website:\n\n"
                  "   tunefetch TF-8907\n\n"
                  "3. Hit Enter to watch 320 kbps songs download in real-time!",
             font=('Segoe UI', 10), bg='#151d2a', fg='#ffffff', justify='left'

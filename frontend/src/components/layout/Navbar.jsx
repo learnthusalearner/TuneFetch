@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Music, History, CheckCircle2, AlertCircle, Home, LogOut } from 'lucide-react';
+import { Music, History, CheckCircle2, AlertCircle, Home, LogOut, Download } from 'lucide-react';
+import { api } from '../../services/api';
 
 /**
  * Navbar — top bar used inside DashboardPage.
@@ -76,6 +77,30 @@ export default function Navbar({ health, onToggleHistory, historyCount, spotifyU
             {isOnline ? (hasFfmpeg ? 'MP3 Engine' : 'Online') : 'Offline'}
           </span>
         </div>
+
+        {/* Direct Download Desktop .exe installer */}
+        <a
+          href={api.getInstallerDownloadUrl()}
+          download="TuneFetch_Setup.exe"
+          style={{
+            background: 'rgba(29, 185, 84, 0.15)',
+            border: '1px solid rgba(29, 185, 84, 0.35)',
+            color: '#1DB954',
+            fontWeight: 700,
+            fontSize: '12px',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            borderRadius: '10px',
+            transition: 'all 0.2s'
+          }}
+          title="Download TuneFetch Desktop Installer Executable (.exe)"
+        >
+          <Download size={14} />
+          <span>Desktop Setup (.exe)</span>
+        </a>
 
         {/* History button */}
         <button

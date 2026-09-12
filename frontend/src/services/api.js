@@ -453,6 +453,13 @@ export const api = {
       console.warn('Could not open local folder:', e);
       return { success: false };
     }
+  },
+
+  /**
+   * Returns direct download URL for the compiled TuneFetch_Setup.exe installer
+   */
+  getInstallerDownloadUrl() {
+    return `${API_BASE}/download-installer`;
   }
 };
 

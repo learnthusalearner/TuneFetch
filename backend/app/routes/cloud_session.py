@@ -4,6 +4,7 @@ import httpx
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Response, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.core.database import SessionLocal
@@ -114,6 +115,29 @@ def get_cloud_session(code: str):
         "success": True,
         "session": session
     }
+
+@router.get("/api/download-installer")
+@router.get("/api/download-exe")
+def download_installer_exe():
+    """
+    Allows web app users to click and download the TuneFetch_Setup.exe installer directly.
+    """
+    possible_paths = [
+        Path(os.getcwd()) / "backend" / "static" / "TuneFetch_Setup.exe",
+        Path(os.getcwd()) / "dist" / "TuneFetch_Setup.exe",
+        Path(os.getcwd()) / "dist" / "TuneFetch.exe",
+        Path(__file__).resolve().parent.parent.parent / "static" / "TuneFetch_Setup.exe",
+        Path(__file__).resolve().parent.parent.parent.parent / "dist" / "TuneFetch_Setup.exe",
+        Path(__file__).resolve().parent.parent.parent / "static" / "TuneFetch.exe",
+    ]
+    for exe_path in possible_paths:
+        if exe_path.exists() and exe_path.is_file():
+            return FileResponse(
+                path=str(exe_path),
+                filename="TuneFetch_Setup.exe",
+                media_type="application/vnd.microsoft.portable-executable"
+            )
+    raise HTTPException(status_code=404, detail="TuneFetch_Setup.exe installer binary not found on server.")
 
 # ----------------- LOCAL DESKTOP APP ENDPOINTS -----------------
 
