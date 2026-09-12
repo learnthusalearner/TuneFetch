@@ -36,6 +36,23 @@ export const api = {
   },
 
   /**
+   * Resolves direct stream URL and metadata for client-side / distributed playback
+   */
+  async fetchDirectStreamUrl(url) {
+    const res = await fetch(`${API_BASE}/stream-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ url: url.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to resolve direct stream URL.');
+    }
+    return data;
+  },
+
+  /**
    * Initiates a single download task
    */
   async startDownload({ url, format = 'mp3-320', title, artist, thumbnail }) {

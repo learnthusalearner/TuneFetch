@@ -23,6 +23,20 @@ def fetch_info(req: InfoRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.post("/stream-url")
+def get_stream_url(req: InfoRequest):
+    """
+    Resolves direct audio stream URL and metadata for client-side / distributed fetching.
+    Allows clients or browsers to fetch audio streams straight from GoogleVideo servers.
+    """
+    if not req.url or not req.url.strip():
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
+    try:
+        data = DownloadManager.get_direct_stream_url(req.url.strip())
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/download")
 def start_download(req: DownloadRequest):
     """

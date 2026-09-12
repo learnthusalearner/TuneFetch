@@ -4,9 +4,12 @@ import time
 import uuid
 import logging
 import threading
+import subprocess
+import urllib.request
+import http.cookiejar
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, Optional
-import yt_dlp
+from typing import Dict, Any, Optional, List, Tuple
+from pytubefix import YouTube, Search, Playlist
 
 from app.core.config import (
     DOWNLOADS_DIR,
@@ -15,11 +18,10 @@ from app.core.config import (
     MAX_CONCURRENT_DOWNLOADS,
     MAX_TASK_HISTORY,
     CLEANUP_INTERVAL_SECONDS,
-    YOUTUBE_POT_PROVIDER_URL,
-    YOUTUBE_PO_TOKEN,
     ROTATING_PROXY_URL
 )
 from app.utils.ffmpeg_helper import get_ffmpeg_path
+from app.utils.sanitizer import sanitize_filename
 from app.services.spotify_resolver import (
     is_spotify_url,
     parse_spotify_type_and_id,
@@ -64,7 +66,6 @@ def sweep_storage_and_memory():
     # 2. Prune old in-memory task records
     with tasks_lock:
         if len(tasks) > MAX_TASK_HISTORY:
-            # Sort by creation time and keep only newest
             sorted_tasks = sorted(tasks.items(), key=lambda x: x[1].get("created_at", 0))
             to_remove = len(tasks) - MAX_TASK_HISTORY
             for k, _ in sorted_tasks[:to_remove]:
@@ -93,8 +94,7 @@ gc_thread.start()
 
 def get_cookie_file() -> Optional[str]:
     """
-    Locates or initializes a Netscape cookies.txt file for yt-dlp authentication.
-    Allows bypassing YouTube bot detection on cloud/datacenter IPs.
+    Locates or initializes a Netscape cookies.txt file for YouTube authentication.
     Supports:
     1. YOUTUBE_COOKIE_FILE / COOKIE_FILE env var (path to file)
     2. YOUTUBE_COOKIES / COOKIES_TXT env var (raw text content)
@@ -106,7 +106,6 @@ def get_cookie_file() -> Optional[str]:
         if fpath and os.path.isfile(fpath):
             return fpath
 
-    # Raw cookie text in environment variable
     raw_cookies = os.getenv("YOUTUBE_COOKIES") or os.getenv("COOKIES_TXT")
     if raw_cookies and len(raw_cookies.strip()) > 10:
         target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
@@ -117,7 +116,6 @@ def get_cookie_file() -> Optional[str]:
         except Exception as e:
             logger.warning(f"Failed writing YOUTUBE_COOKIES to file: {e}")
 
-    # Base64 encoded cookie text
     b64_cookies = os.getenv("YOUTUBE_COOKIES_BASE64")
     if b64_cookies and len(b64_cookies.strip()) > 10:
         target_path = os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt")
@@ -130,7 +128,6 @@ def get_cookie_file() -> Optional[str]:
         except Exception as e:
             logger.warning(f"Failed writing YOUTUBE_COOKIES_BASE64 to file: {e}")
 
-    # Local workspace candidates
     from app.core.config import BASE_DIR
     candidates = [
         os.path.join(DOWNLOADS_DIR, "youtube_cookies.txt"),
@@ -144,64 +141,105 @@ def get_cookie_file() -> Optional[str]:
 
     return None
 
-def build_base_ydl_opts() -> Dict[str, Any]:
+def setup_global_network_handlers():
     """
-    Constructs default yt-dlp options with multi-client fallbacks,
-    stealth browser headers, PO token provider integration, and cookie support.
+    Configures standard urllib openers with cookie jar and proxies
+    to support pytubefix requests uniformly.
     """
-    opts: Dict[str, Any] = {
-        "quiet": False,
-        "no_warnings": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Sec-Fetch-Mode": "navigate",
-        },
-        "extractor_args": {},
-    }
-
-    # 1. Optional Proxy Support (Residential or DataCenter Proxy)
-    if ROTATING_PROXY_URL:
-        opts["proxy"] = ROTATING_PROXY_URL
-        logger.info("Using configured proxy for media extraction")
-
-    # 2. Automated Proof-of-Origin (POT) Provider Service (Option 2: bgutil-ytdlp-pot-provider)
-    if YOUTUBE_POT_PROVIDER_URL:
-        opts["extractor_args"]["youtubepot-bgutilhttp"] = {
-            "base_url": YOUTUBE_POT_PROVIDER_URL.rstrip("/")
-        }
-        opts["extractor_args"].setdefault("youtube", {})["player_client"] = [
-            "web", "web_embedded", "android"
-        ]
-        logger.info(f"Connected to automated PO Token generator service: {YOUTUBE_POT_PROVIDER_URL}")
-
-    # 3. Static Proof-of-Origin (PO) Token
-    if YOUTUBE_PO_TOKEN:
-        token_val = YOUTUBE_PO_TOKEN.strip()
-        if "+" not in token_val:
-            token_val = f"web+{token_val}"
-        opts["extractor_args"].setdefault("youtube", {})["po_token"] = [token_val]
-        logger.info("Configured custom YouTube PO Token")
-
-    # 4. Cookie or Datacenter Client routing
+    handlers = []
     cookie_file = get_cookie_file()
     if cookie_file:
-        opts["cookiefile"] = cookie_file
-        # Authenticated clients that support cookies
-        opts["extractor_args"].setdefault("youtube", {})["player_client"] = [
-            "web_embedded", "tv_downgraded", "web"
-        ]
-        logger.info(f"Loaded YouTube authentication cookies from: {cookie_file}")
-    elif not YOUTUBE_POT_PROVIDER_URL:
-        # Datacenter/server fallback without cookies or POT service: android client bypasses bot blocks
-        custom_client = os.getenv("YOUTUBE_PLAYER_CLIENT", "android,web")
-        clients = [c.strip() for c in custom_client.split(",") if c.strip()]
-        opts["extractor_args"].setdefault("youtube", {})["player_client"] = clients
+        try:
+            cookie_jar = http.cookiejar.MozillaCookieJar(cookie_file)
+            cookie_jar.load(ignore_discard=True, ignore_expires=True)
+            handlers.append(urllib.request.HTTPCookieProcessor(cookie_jar))
+            logger.info(f"Loaded YouTube authentication cookies into urllib from {cookie_file}")
+        except Exception as e:
+            logger.warning(f"Failed loading cookie file into urllib: {e}")
 
-    return opts
+    if ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
+        proxy_dict = {
+            "http": ROTATING_PROXY_URL.strip(),
+            "https": ROTATING_PROXY_URL.strip()
+        }
+        handlers.append(urllib.request.ProxyHandler(proxy_dict))
+        logger.info("Configured rotating proxy in urllib handlers")
+
+    if handlers:
+        opener = urllib.request.build_opener(*handlers)
+        urllib.request.install_opener(opener)
+
+# Apply global network configuration once at startup
+setup_global_network_handlers()
+
+CLIENT_FALLBACK_ORDER = ["MWEB", "VISION_OS", "ANDROID", "WEB", "IOS", "TV"]
+
+def build_pytubefix_instance(
+    url: str,
+    client: str = "MWEB",
+    on_progress_callback=None,
+    on_complete_callback=None
+) -> YouTube:
+    """
+    Constructs a pytubefix YouTube object with proxy configuration.
+    """
+    proxy_dict = None
+    if ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
+        proxy_dict = {
+            "http": ROTATING_PROXY_URL.strip(),
+            "https": ROTATING_PROXY_URL.strip()
+        }
+
+    return YouTube(
+        url,
+        client=client,
+        on_progress_callback=on_progress_callback,
+        on_complete_callback=on_complete_callback,
+        proxies=proxy_dict
+    )
+
+def fetch_youtube_with_fallback(
+    url: str,
+    on_progress_callback=None,
+    on_complete_callback=None
+) -> Tuple[YouTube, Any]:
+    """
+    Tries multiple client profiles in sequence until a valid audio stream is found.
+    Prioritizes stable non-SABR direct audio streams (like MWEB / VISION_OS) for reliable downloads,
+    falling back to any valid audio stream if necessary.
+    Returns (yt_instance, best_audio_stream).
+    Raises RuntimeError if all clients fail.
+    """
+    last_err = None
+    for client_name in CLIENT_FALLBACK_ORDER:
+        try:
+            yt = build_pytubefix_instance(
+                url=url,
+                client=client_name,
+                on_progress_callback=on_progress_callback,
+                on_complete_callback=on_complete_callback
+            )
+            # Accessing title forces basic metadata extraction
+            _ = yt.title
+            
+            # First priority: non-SABR audio streams for maximum download stability
+            all_audio = yt.streams.filter(only_audio=True).order_by("abr").desc()
+            non_sabr_streams = [s for s in all_audio if not getattr(s, "is_sabr", False)]
+            if non_sabr_streams:
+                return yt, non_sabr_streams[0]
+
+            # Second priority: standard audio stream
+            stream = yt.streams.get_audio_only()
+            if stream:
+                return yt, stream
+
+            if all_audio and len(all_audio) > 0:
+                return yt, all_audio.first()
+        except Exception as err:
+            last_err = err
+            logger.debug(f"Pytubefix client '{client_name}' failed for '{url}': {err}")
+
+    raise RuntimeError(f"Could not extract audio stream across all clients ({', '.join(CLIENT_FALLBACK_ORDER)}): {last_err}")
 
 class DownloadManager:
     @staticmethod
@@ -241,99 +279,105 @@ class DownloadManager:
                     "formats": ["mp3-320", "mp3-256", "mp3-128", "best-audio"]
                 }
 
-        # 2. General URL parsing via yt-dlp
-        ydl_opts = build_base_ydl_opts()
-        ydl_opts.update({
-            "quiet": True,
-            "extract_flat": "in_playlist",
-            "skip_download": True,
-        })
-        ffmpeg_exe = get_ffmpeg_path()
-        if ffmpeg_exe:
-            ydl_opts["ffmpeg_location"] = ffmpeg_exe
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # 2. Check for YouTube Playlist
+        if "playlist?list=" in url or "&list=" in url:
             try:
-                info = ydl.extract_info(url, download=False)
-            except Exception as e:
-                err_str = str(e)
-                # If bot verification hit or client rejected, retry with explicit android client
-                if "Sign in to confirm you're not a bot" in err_str or "confirm you" in err_str.lower():
-                    logger.warning(f"get_info hit bot verification for {url}. Retrying with android client...")
-                    retry_opts = dict(ydl_opts)
-                    retry_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+                p = Playlist(url)
+                entries = []
+                for idx, v in enumerate(p.videos):
                     try:
-                        with yt_dlp.YoutubeDL(retry_opts) as retry_ydl:
-                            info = retry_ydl.extract_info(url, download=False)
-                    except Exception as fb_err:
-                        raise ValueError(
-                            "YouTube requested bot verification on this datacenter IP. "
-                            "Please configure YOUTUBE_COOKIES in Render Environment Variables."
-                        ) from fb_err
-                elif not url.startswith("http://") and not url.startswith("https://"):
-                    try:
-                        info = ydl.extract_info(f"ytsearch1:{url}", download=False)
-                        if "entries" in info and len(info["entries"]) > 0:
-                            info = info["entries"][0]
-                        else:
-                            raise ValueError(f"No results found for search query: {url}")
-                    except Exception as search_err:
-                        err_search = str(search_err)
-                        if "Sign in to confirm you're not a bot" in err_search or "confirm you" in err_search.lower():
-                            logger.warning(f"ytsearch hit bot verification for '{url}'. Retrying with android client...")
-                            retry_opts = dict(ydl_opts)
-                            retry_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
-                            with yt_dlp.YoutubeDL(retry_opts) as retry_ydl:
-                                sinfo = retry_ydl.extract_info(f"ytsearch1:{url}", download=False)
-                                if "entries" in sinfo and len(sinfo["entries"]) > 0:
-                                    info = sinfo["entries"][0]
-                                else:
-                                    raise ValueError(f"No results found for search query: {url}")
-                        else:
-                            raise search_err
+                        entries.append({
+                            "id": idx,
+                            "title": v.title or f"Track {idx+1}",
+                            "artist": v.author or "",
+                            "duration": v.length or 0,
+                            "thumbnail": v.thumbnail_url or "",
+                            "url": v.watch_url
+                        })
+                    except Exception:
+                        pass
+                return {
+                    "is_playlist": True,
+                    "platform": "youtube",
+                    "title": p.title or "YouTube Playlist",
+                    "thumbnail": entries[0]["thumbnail"] if entries else "",
+                    "track_count": len(entries),
+                    "tracks": entries,
+                    "original_url": url
+                }
+            except Exception as pl_err:
+                logger.warning(f"Playlist extraction failed, falling back to single video: {pl_err}")
+
+        # 3. Check if query is plain text search rather than direct URL
+        target_url = url
+        if not url.startswith("http://") and not url.startswith("https://"):
+            try:
+                s = Search(url)
+                if s.videos and len(s.videos) > 0:
+                    target_url = s.videos[0].watch_url
                 else:
-                    raise ValueError(f"Failed to fetch info: {err_str}")
+                    raise ValueError(f"No results found for search query: {url}")
+            except Exception as s_err:
+                raise ValueError(f"Search failed for '{url}': {s_err}")
 
-        if not info:
-            raise ValueError("No metadata could be extracted from the provided URL")
-
-        # Handle Playlists
-        if "entries" in info and info.get("_type") == "playlist":
-            entries = []
-            for idx, entry in enumerate(info.get("entries", [])):
-                if entry:
-                    entries.append({
-                        "id": idx,
-                        "title": entry.get("title", f"Track {idx+1}"),
-                        "artist": entry.get("uploader", entry.get("channel", "")),
-                        "duration": entry.get("duration", 0),
-                        "thumbnail": entry.get("thumbnail") or (entry.get("thumbnails")[-1]["url"] if entry.get("thumbnails") else ""),
-                        "url": entry.get("url") or entry.get("webpage_url", f"https://www.youtube.com/watch?v={entry.get('id')}")
-                    })
-            return {
-                "is_playlist": True,
-                "platform": "youtube",
-                "title": info.get("title", "YouTube Playlist"),
-                "thumbnail": info.get("thumbnail") or (entries[0]["thumbnail"] if entries else ""),
-                "track_count": len(entries),
-                "tracks": entries,
-                "original_url": url
-            }
-
-        # Single video / audio track
-        thumbnail = info.get("thumbnail")
-        if not thumbnail and info.get("thumbnails"):
-            thumbnail = info.get("thumbnails")[-1].get("url")
-
+        # 4. Single video / audio metadata resolution with client fallback
+        yt, stream = fetch_youtube_with_fallback(target_url)
         return {
             "is_playlist": False,
-            "platform": "youtube" if ("youtube" in url or "youtu.be" in url) else "generic",
-            "title": info.get("title", "Unknown Title"),
-            "artist": info.get("artist") or info.get("uploader") or info.get("channel", "Unknown Artist"),
-            "thumbnail": thumbnail or "",
-            "duration": info.get("duration", 0),
-            "original_url": url,
+            "platform": "youtube" if ("youtube" in target_url or "youtu.be" in target_url) else "generic",
+            "title": yt.title or "Unknown Title",
+            "artist": yt.author or "Unknown Artist",
+            "thumbnail": yt.thumbnail_url or "",
+            "duration": yt.length or 0,
+            "original_url": target_url,
             "formats": ["mp3-320", "mp3-256", "mp3-128", "best-audio"]
+        }
+
+    @staticmethod
+    def get_direct_stream_url(url: str) -> Dict[str, Any]:
+        """
+        Resolves direct audio stream URL and metadata for client-side / distributed fetching.
+        Allows web clients to stream/download straight from YouTube servers without putting
+        bandwidth or IP burden on the backend server.
+        """
+        url = url.strip()
+        if not url:
+            raise ValueError("URL cannot be empty")
+
+        target_url = url
+        custom_title = None
+        custom_artist = None
+        custom_thumb = None
+
+        if is_spotify_url(url):
+            resolved = resolve_spotify_track(url)
+            custom_title = resolved["title"]
+            custom_artist = resolved["artist"]
+            custom_thumb = resolved["thumbnail"]
+            s = Search(resolved["search_query"])
+            if s.videos and len(s.videos) > 0:
+                target_url = s.videos[0].watch_url
+            else:
+                raise ValueError(f"Could not resolve Spotify track on YouTube: {resolved['search_query']}")
+        elif not url.startswith("http://") and not url.startswith("https://"):
+            s = Search(url)
+            if s.videos and len(s.videos) > 0:
+                target_url = s.videos[0].watch_url
+            else:
+                raise ValueError(f"No search results for query: {url}")
+
+        yt, stream = fetch_youtube_with_fallback(target_url)
+        return {
+            "success": True,
+            "direct_stream_url": stream.url,
+            "title": custom_title or yt.title or "Audio",
+            "artist": custom_artist or yt.author or "",
+            "thumbnail": custom_thumb or yt.thumbnail_url or "",
+            "duration": yt.length or 0,
+            "mime_type": stream.mime_type or "audio/mp4",
+            "abr": getattr(stream, "abr", "128kbps"),
+            "filesize": getattr(stream, "filesize", 0),
+            "watch_url": target_url
         }
 
     @staticmethod
@@ -348,7 +392,7 @@ class DownloadManager:
         Initializes an asynchronous download task queued in the bounded thread pool.
         """
         task_id = str(uuid.uuid4())
-        
+
         with tasks_lock:
             tasks[task_id] = {
                 "id": task_id,
@@ -368,7 +412,7 @@ class DownloadManager:
                 "created_at": time.time()
             }
 
-        # Submit task to the bounded worker pool (prevents CPU overload on 1000s of requests)
+        # Submit task to the bounded worker pool
         executor.submit(
             DownloadManager._run_download,
             task_id, url, format_type, custom_title, custom_artist
@@ -388,7 +432,6 @@ class DownloadManager:
         if is_spotify_url(url):
             try:
                 resolved = resolve_spotify_track(url)
-                target_url = f"ytsearch1:{resolved['search_query']}"
                 if not custom_title:
                     custom_title = resolved["title"]
                 if not custom_artist:
@@ -398,113 +441,169 @@ class DownloadManager:
                         tasks[task_id]["title"] = resolved["title"]
                         tasks[task_id]["artist"] = resolved["artist"]
                         tasks[task_id]["thumbnail"] = resolved["thumbnail"]
+
+                # Resolve via Search
+                s = Search(resolved["search_query"])
+                if s.videos and len(s.videos) > 0:
+                    target_url = s.videos[0].watch_url
+                else:
+                    raise ValueError(f"Could not find YouTube match for: {resolved['search_query']}")
             except Exception as e:
                 logger.error(f"Error resolving Spotify track: {e}")
+                with tasks_lock:
+                    if task_id in tasks:
+                        tasks[task_id]["status"] = "error"
+                        tasks[task_id]["error"] = f"Failed resolving Spotify track: {e}"
+                return
 
-        ffmpeg_exe = get_ffmpeg_path()
+        elif not target_url.startswith("http://") and not target_url.startswith("https://"):
+            try:
+                s = Search(target_url)
+                if s.videos and len(s.videos) > 0:
+                    target_url = s.videos[0].watch_url
+                else:
+                    raise ValueError(f"No results for query: {target_url}")
+            except Exception as e:
+                with tasks_lock:
+                    if task_id in tasks:
+                        tasks[task_id]["status"] = "error"
+                        tasks[task_id]["error"] = str(e)
+                return
 
         is_mp3 = format_type.startswith("mp3")
         bitrate = DEFAULT_BITRATE
         if is_mp3 and "-" in format_type:
             bitrate = format_type.split("-")[1]
 
-        def progress_hook(d):
-            if d.get("status") == "downloading":
-                with tasks_lock:
-                    if task_id not in tasks:
-                        return
-                    total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                    downloaded = d.get("downloaded_bytes") or 0
-                    percent = 0.0
-                    if total_bytes > 0:
-                        percent = round((downloaded / total_bytes) * 100, 1)
+        last_update_time = [time.time()]
+        last_downloaded_bytes = [0]
+
+        def on_progress(stream, chunk, bytes_remaining):
+            with tasks_lock:
+                if task_id not in tasks:
+                    return
+
+            total_size = stream.filesize or 0
+            if total_size > 0:
+                downloaded = total_size - bytes_remaining
+                percent = round((downloaded / total_size) * 100, 1)
+
+                now = time.time()
+                time_diff = now - last_update_time[0]
+                speed_str = "N/A"
+                eta_str = "--"
+
+                if time_diff >= 0.5:
+                    bytes_diff = downloaded - last_downloaded_bytes[0]
+                    speed_bps = bytes_diff / time_diff if time_diff > 0 else 0
+                    if speed_bps > 1024 * 1024:
+                        speed_str = f"{speed_bps / (1024 * 1024):.1f} MB/s"
                     else:
-                        percent_str = d.get("_percent_str", "0%").replace("%", "").strip()
-                        try:
-                            percent = float(percent_str)
-                        except Exception:
-                            percent = 0.0
+                        speed_str = f"{speed_bps / 1024:.0f} KB/s"
 
-                    tasks[task_id]["status"] = "downloading"
-                    tasks[task_id]["progress"] = percent
-                    tasks[task_id]["speed"] = d.get("_speed_str", "N/A")
-                    tasks[task_id]["eta"] = d.get("_eta_str", "--")
+                    if speed_bps > 0:
+                        eta_seconds = int(bytes_remaining / speed_bps)
+                        eta_str = f"{eta_seconds}s"
 
-            elif d.get("status") == "finished":
+                    last_update_time[0] = now
+                    last_downloaded_bytes[0] = downloaded
+
                 with tasks_lock:
                     if task_id in tasks:
-                        tasks[task_id]["status"] = "converting" if is_mp3 else "completed"
-                        tasks[task_id]["progress"] = 99.0 if is_mp3 else 100.0
+                        tasks[task_id]["status"] = "downloading"
+                        tasks[task_id]["progress"] = min(98.0, percent)
+                        tasks[task_id]["speed"] = speed_str
+                        tasks[task_id]["eta"] = eta_str
 
-        out_template = os.path.join(DOWNLOADS_DIR, f"{task_id}_%(title).150B.%(ext)s")
-
-        ydl_opts = build_base_ydl_opts()
-        ydl_opts.update({
-            "format": "bestaudio/best",
-            "outtmpl": out_template,
-            "progress_hooks": [progress_hook],
-        })
-
-        if ffmpeg_exe:
-            ydl_opts["ffmpeg_location"] = ffmpeg_exe
-
-        if is_mp3:
-            if ffmpeg_exe:
-                ydl_opts["postprocessors"] = [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": bitrate,
-                }]
-            else:
-                logger.warning("FFmpeg binary not detected; saving best available stream.")
+        raw_temp_filepath = None
+        final_mp3_filepath = None
 
         try:
             with tasks_lock:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "downloading"
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(target_url, download=True)
-                except Exception as dl_err:
-                    err_str = str(dl_err)
-                    if "Sign in to confirm you're not a bot" in err_str or "confirm you" in err_str.lower():
-                        logger.warning(f"Download hit bot verification for {target_url}. Retrying with android fallback...")
-                        fallback_opts = dict(ydl_opts)
-                        fallback_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
-                        with yt_dlp.YoutubeDL(fallback_opts) as fallback_ydl:
-                            info = fallback_ydl.extract_info(target_url, download=True)
-                    else:
-                        raise dl_err
+            # 1. Fetch YouTube instance with client fallback
+            yt, audio_stream = fetch_youtube_with_fallback(
+                target_url,
+                on_progress_callback=on_progress
+            )
 
-                if "entries" in info and len(info["entries"]) > 0:
-                    info = info["entries"][0]
+            video_title = custom_title or yt.title or "Audio"
+            video_artist = custom_artist or yt.author or ""
+            thumbnail = yt.thumbnail_url or ""
 
-                video_title = custom_title or info.get("title", "Audio")
-                video_artist = custom_artist or info.get("artist") or info.get("uploader") or ""
-                thumbnail = info.get("thumbnail") or ""
-
-            matching_files = glob.glob(os.path.join(DOWNLOADS_DIR, f"{task_id}_*"))
-            if not matching_files:
-                raise FileNotFoundError("Target download file was not created by yt-dlp")
-
-            final_filepath = matching_files[0]
-            raw_filename = os.path.basename(final_filepath)
+            # 2. Download raw audio stream to temporary file in DOWNLOADS_DIR
+            stream_ext = "m4a" if "mp4" in (audio_stream.mime_type or "") else "webm"
+            temp_filename = f"{task_id}_raw.{stream_ext}"
             
-            # Clean filename
-            clean_display_name = raw_filename.split(f"{task_id}_", 1)[-1]
-            if is_mp3 and not clean_display_name.lower().endswith(".mp3"):
-                clean_display_name = f"{os.path.splitext(clean_display_name)[0]}.mp3"
+            audio_stream.download(
+                output_path=DOWNLOADS_DIR,
+                filename=temp_filename
+            )
 
-            filesize = os.path.getsize(final_filepath)
+            raw_temp_filepath = os.path.join(DOWNLOADS_DIR, temp_filename)
+            if not os.path.exists(raw_temp_filepath):
+                raise FileNotFoundError(f"Raw audio stream file was not created at: {raw_temp_filepath}")
+
+            # 3. Audio conversion / standardization to MP3 via FFmpeg
+            ffmpeg_exe = get_ffmpeg_path()
+            safe_title = sanitize_filename(video_title, ".mp3")
+            target_output_filename = f"{task_id}_{safe_title}"
+            if not target_output_filename.lower().endswith(".mp3"):
+                target_output_filename = f"{target_output_filename}.mp3"
+
+            final_mp3_filepath = os.path.join(DOWNLOADS_DIR, target_output_filename)
+
+            with tasks_lock:
+                if task_id in tasks:
+                    tasks[task_id]["status"] = "converting" if is_mp3 else "completed"
+                    tasks[task_id]["progress"] = 99.0 if is_mp3 else 100.0
+
+            if is_mp3 and ffmpeg_exe:
+                # Convert raw audio stream into high-fidelity MP3
+                ffmpeg_cmd = [
+                    ffmpeg_exe,
+                    "-y",
+                    "-i", raw_temp_filepath,
+                    "-vn",
+                    "-b:a", f"{bitrate}k",
+                    "-ac", "2",
+                    "-ar", "44100",
+                    final_mp3_filepath
+                ]
+                proc = subprocess.run(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                if proc.returncode != 0:
+                    logger.warning(f"FFmpeg conversion failed: {proc.stderr}. Using raw stream fallback.")
+                    final_mp3_filepath = raw_temp_filepath
+                else:
+                    # Successfully converted: purge raw stream temporary file immediately
+                    try:
+                        if os.path.exists(raw_temp_filepath):
+                            os.remove(raw_temp_filepath)
+                    except Exception as clean_err:
+                        logger.warning(f"Error removing raw stream temporary file: {clean_err}")
+            else:
+                # Without ffmpeg or non-mp3 format requested, keep stream as is
+                final_mp3_filepath = raw_temp_filepath
+
+            filesize = os.path.getsize(final_mp3_filepath)
+            display_name = os.path.basename(final_mp3_filepath).split(f"{task_id}_", 1)[-1]
+            if is_mp3 and not display_name.lower().endswith(".mp3"):
+                display_name = f"{os.path.splitext(display_name)[0]}.mp3"
 
             with tasks_lock:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "completed"
                     tasks[task_id]["progress"] = 100.0
                     tasks[task_id]["file_id"] = task_id
-                    tasks[task_id]["filename"] = clean_display_name
-                    tasks[task_id]["filepath"] = final_filepath
+                    tasks[task_id]["filename"] = display_name
+                    tasks[task_id]["filepath"] = final_mp3_filepath
                     tasks[task_id]["filesize"] = filesize
                     tasks[task_id]["title"] = video_title
                     tasks[task_id]["artist"] = video_artist
@@ -513,12 +612,21 @@ class DownloadManager:
 
         except Exception as e:
             logger.error(f"Download task {task_id} encountered an error: {e}", exc_info=True)
+            # Ensure partial / temporary files are cleaned up on failure
+            for temp_f in [raw_temp_filepath, final_mp3_filepath]:
+                if temp_f and os.path.exists(temp_f):
+                    try:
+                        os.remove(temp_f)
+                    except Exception:
+                        pass
+
             err_msg = str(e)
-            if "Sign in to confirm you're not a bot" in err_msg or "confirm you" in err_msg.lower():
+            if "bot" in err_msg.lower() or "429" in err_msg:
                 err_msg = (
-                    "YouTube requested bot verification on this datacenter IP. "
-                    "Please export cookies.txt from your browser and configure YOUTUBE_COOKIES in Render Environment Variables."
+                    "YouTube requested bot verification or rate-limited this request. "
+                    "Configuring YOUTUBE_COOKIES or ROTATING_PROXY_URL will automatically bypass this limit."
                 )
+
             with tasks_lock:
                 if task_id in tasks:
                     tasks[task_id]["status"] = "error"
@@ -538,11 +646,11 @@ class DownloadManager:
             task = tasks.get(task_id)
             if task and task.get("filepath") and os.path.exists(task["filepath"]):
                 return task["filepath"]
-        
+
         matching_files = glob.glob(os.path.join(DOWNLOADS_DIR, f"{task_id}_*"))
         if matching_files and os.path.exists(matching_files[0]):
             return matching_files[0]
-            
+
         return None
 
     @staticmethod
@@ -558,7 +666,7 @@ class DownloadManager:
                 if filepath and os.path.exists(filepath):
                     os.remove(filepath)
                     logger.info(f"[AutoClean] Successfully deleted served file: {os.path.basename(filepath)}")
-                
+
                 # Also remove any matching partial files for this task_id
                 for f in glob.glob(os.path.join(DOWNLOADS_DIR, f"{task_id}_*")):
                     try:
@@ -569,6 +677,5 @@ class DownloadManager:
             except Exception as e:
                 logger.warning(f"[AutoClean] Error during deferred deletion for task {task_id}: {e}")
 
-        # Run deletion in a detached background thread after a brief response delivery window
         cleanup_worker = threading.Thread(target=_deferred_delete, daemon=True)
         cleanup_worker.start()

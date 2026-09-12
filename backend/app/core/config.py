@@ -12,8 +12,8 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # Application metadata
 APP_TITLE = "TuneFetch Audio Engine"
-APP_DESCRIPTION = "High-performance, resource-capped backend powered by yt-dlp to extract high-fidelity MP3 and raw audio streams."
-APP_VERSION = "1.2.0"
+APP_DESCRIPTION = "High-performance, resource-capped backend powered by pytubefix to extract high-fidelity MP3 and raw audio streams."
+APP_VERSION = "1.3.0"
 
 # Database Configuration (Neon PostgreSQL or SQLite fallback)
 DATABASE_URL = os.getenv(
