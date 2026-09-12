@@ -63,16 +63,36 @@ def run_cli_mode(code: str):
     print(f"\n======================================================================")
     print(f"               TuneFetch High-Fidelity Downloader v1.3                ")
     print(f"======================================================================\n")
-    print(f"[*] Fetching playlist session '{clean_code}' from cloud server...")
+    print(f"[*] Resolving playlist session '{clean_code}'...")
 
-    cloud_url = f"https://tunefetch-t5mp.onrender.com/api/cloud-session/{clean_code}"
+    session = None
+    # 1. Try local in-memory session store first
     try:
-        req = urllib.request.Request(cloud_url, headers={"User-Agent": "TuneFetch-CLI"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            session = data.get("session", {})
-    except Exception as e:
-        print(f"[!] Could not fetch session code '{clean_code}': {e}")
+        from app.services.cloud_session_store import CloudSessionStore
+        session = CloudSessionStore.get_session(clean_code)
+    except Exception:
+        pass
+
+    # 2. Try local HTTP endpoint & cloud HTTP endpoint
+    if not session:
+        endpoints = [
+            f"http://127.0.0.1:8000/api/cloud-session/{clean_code}",
+            f"https://tunefetch-t5mp.onrender.com/api/cloud-session/{clean_code}"
+        ]
+        for url_endpoint in endpoints:
+            try:
+                req = urllib.request.Request(url_endpoint, headers={"User-Agent": "TuneFetch-CLI"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    session = data.get("session")
+                    if session and session.get("tracks"):
+                        break
+            except Exception:
+                continue
+
+    if not session or not session.get("tracks"):
+        print(f"[!] Session code '{clean_code}' not found or has expired (valid for 24 hours).")
+        print(f"    Please generate a fresh download session code on the website and try again.\n")
         sys.exit(1)
 
     playlist_name = session.get("playlist_name", "Spotify Playlist")
@@ -85,10 +105,16 @@ def run_cli_mode(code: str):
     print(f"[+] Quality:       320 kbps Ultra HQ MP3")
     print(f"[+] Target Folder: {USER_DOWNLOADS}\\{playlist_name}\n")
 
+    if hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
     from app.services.local_batch_downloader import LocalBatchDownloader
     batch_id = LocalBatchDownloader.start_batch(playlist_name=playlist_name, tracks=tracks)
 
-    last_completed_count = 0
+    last_processed_count = 0
 
     while True:
         status = LocalBatchDownloader.get_batch_status(batch_id)
@@ -99,6 +125,9 @@ def run_cli_mode(code: str):
         b_status = status.get("status")
         total = status.get("total_tracks", len(tracks))
         completed = status.get("completed_tracks", 0)
+        failed = status.get("failed_tracks", 0)
+        processed = completed + failed
+
         cur_title = status.get("current_track_title", "Preparing stream...")
         cur_prog = float(status.get("current_track_progress", 0.0) or 0.0)
         cur_speed = str(status.get("current_track_speed", "0 KB/s"))
@@ -106,15 +135,19 @@ def run_cli_mode(code: str):
         elapsed_sec = int(status.get("elapsed_seconds", 0) or 0)
         tracks_prog = status.get("tracks_progress", [])
 
-        # Print line for finished songs
-        if completed > last_completed_count:
-            for c_idx in range(last_completed_count, completed):
+        # Print line for finished or skipped songs
+        if processed > last_processed_count:
+            for c_idx in range(last_processed_count, processed):
                 if c_idx < len(tracks_prog):
                     t_info = tracks_prog[c_idx]
                     t_name = f"{t_info.get('artist')} - {t_info.get('title')}" if t_info.get('artist') else t_info.get('title')
-                    sys.stdout.write(f"\r\033[K✓ [{c_idx+1}/{total}] Saved: {t_name}\n")
+                    t_st = t_info.get("status")
+                    if t_st == "COMPLETED":
+                        sys.stdout.write(f"\r\033[K[✓] [{c_idx+1}/{total}] Saved: {t_name}\n")
+                    else:
+                        sys.stdout.write(f"\r\033[K[!] [{c_idx+1}/{total}] Skipped ({t_st}): {t_name}\n")
                     sys.stdout.flush()
-            last_completed_count = completed
+            last_processed_count = processed
 
         # Print terminal progress line
         bar_len = 25
@@ -128,15 +161,16 @@ def run_cli_mode(code: str):
 
         title_trunc = (cur_title[:32] + "..") if len(cur_title) > 34 else cur_title
         if b_status == "DOWNLOADING":
-            sys.stdout.write(f"\r\033[K► [{completed + 1}/{total}] {title_trunc:<34} [{bar}] {int(cur_prog):>3}% | {cur_speed:>9} | ETA: {eta_m:02d}:{eta_s:02d}")
+            cur_idx = min(total, processed + 1)
+            sys.stdout.write(f"\r\033[K[+] [{cur_idx}/{total}] {title_trunc:<34} [{bar}] {int(cur_prog):>3}% | {cur_speed:>9} | ETA: {eta_m:02d}:{eta_s:02d}")
             sys.stdout.flush()
 
         if b_status == "COMPLETED":
             sys.stdout.write("\r\033[K")
             print(f"\n======================================================================")
-            print(f"  ✓ All {completed} songs downloaded into:")
-            print(f"    {USER_DOWNLOADS}\\{playlist_name}")
-            print(f"  ⏱ Total Time: {mm:02d}:{ss:02d}")
+            print(f"  [✓] Processed {total} tracks ({completed} saved, {failed} skipped) into:")
+            print(f"      {USER_DOWNLOADS}\\{playlist_name}")
+            print(f"  [TIME] Total Time: {mm:02d}:{ss:02d}")
             print(f"======================================================================\n")
             break
 
