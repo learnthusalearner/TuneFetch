@@ -29,10 +29,11 @@ def main():
         shutil.rmtree(frontend_dist_dest)
     shutil.copytree(frontend_dir / "dist", frontend_dist_dest)
     
-    # Step 3: Install PyInstaller if not installed
-    print("\n[3/4] Installing PyInstaller...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
-    
+    # Step 3: Close any running TuneFetch instances before overwriting
+    print("\n[3/4] Checking for running TuneFetch instances...")
+    if os.name == "nt":
+        subprocess.run(["powershell", "-Command", "Stop-Process -Name TuneFetch -Force -ErrorAction SilentlyContinue"], capture_output=True)
+
     # Step 4: Run PyInstaller
     print("\n[4/4] Running PyInstaller...")
     
