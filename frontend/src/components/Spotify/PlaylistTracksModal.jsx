@@ -717,7 +717,7 @@ export default function PlaylistTracksModal({
                   1
                 </span>
                 <span>
-                  Launch <strong>TuneFetch.exe</strong> (or double-click <code>run_tunefetch.bat</code>) on your computer.
+                  Launch <strong>TuneFetch.exe</strong> on your computer.
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
