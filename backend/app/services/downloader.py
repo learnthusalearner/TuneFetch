@@ -183,10 +183,11 @@ def build_pytubefix_instance(
     client: str = "MWEB",
     on_progress_callback=None,
     on_complete_callback=None,
-    use_proxy: bool = False
+    use_proxy: bool = False,
+    po_token: Optional[str] = None
 ) -> YouTube:
     """
-    Constructs a pytubefix YouTube object with dynamic proxy configuration.
+    Constructs a pytubefix YouTube object with dynamic proxy and PO token verifier configuration.
     """
     proxy_dict = None
     if use_proxy and ROTATING_PROXY_URL and ROTATING_PROXY_URL.strip():
@@ -195,12 +196,19 @@ def build_pytubefix_instance(
             "https": ROTATING_PROXY_URL.strip()
         }
 
+    verifier = None
+    if po_token:
+        def verifier():
+            return "", po_token
+
     return YouTube(
         url,
         client=client,
         on_progress_callback=on_progress_callback,
         on_complete_callback=on_complete_callback,
-        proxies=proxy_dict
+        proxies=proxy_dict,
+        use_po_token=bool(po_token),
+        po_token_verifier=verifier
     )
 
 def fetch_youtube_with_fallback(
@@ -226,23 +234,25 @@ def fetch_youtube_with_fallback(
         configure_urllib_network(use_proxy=use_proxy)
         for client_name in CLIENT_FALLBACK_ORDER:
             try:
+                # Pre-generate PO token via botGuard for this video if needed
+                if po_token_cache is None:
+                    try:
+                        from pytubefix.botGuard.bot_guard import generate_po_token
+                        from pytubefix import extract
+                        vid_id = extract.video_id(url)
+                        po_token_cache = generate_po_token(vid_id) or ""
+                    except Exception as pot_err:
+                        logger.debug(f"Auto PO token generation skipped: {pot_err}")
+                        po_token_cache = ""
+
                 yt = build_pytubefix_instance(
                     url=url,
                     client=client_name,
                     on_progress_callback=on_progress_callback,
                     on_complete_callback=on_complete_callback,
-                    use_proxy=use_proxy
+                    use_proxy=use_proxy,
+                    po_token=po_token_cache if po_token_cache else None
                 )
-
-                # Auto-generate PO token via botGuard if not already generated
-                try:
-                    if not po_token_cache:
-                        from pytubefix.botGuard.bot_guard import generate_po_token
-                        po_token_cache = generate_po_token(yt.video_id)
-                    if po_token_cache:
-                        yt.po_token = po_token_cache
-                except Exception as pot_err:
-                    logger.debug(f"Auto PO token generation skipped: {pot_err}")
 
                 # Accessing title forces basic metadata extraction
                 _ = yt.title
