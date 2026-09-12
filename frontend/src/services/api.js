@@ -348,5 +348,100 @@ export const api = {
     } catch {
       return { success: false };
     }
+  },
+
+  // ==================== CLOUD SESSION & LOCAL DESKTOP HANDOFF API ====================
+
+  /**
+   * Pings the local TuneFetch desktop engine on localhost:8000
+   */
+  async checkLocalDesktopStatus() {
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 1800);
+      const res = await fetch('http://127.0.0.1:8000/api/local/status', {
+        method: 'GET',
+        signal: ctrl.signal
+      });
+      clearTimeout(tid);
+      if (!res.ok) return { isRunning: false };
+      const data = await res.json();
+      return { isRunning: true, ...data };
+    } catch {
+      return { isRunning: false };
+    }
+  },
+
+  /**
+   * Generates a 24-hour cloud session code (e.g. TF-4982) holding the playlist songs JSON
+   */
+  async createCloudSession({ playlist_name, image = '', tracks = [] }) {
+    const res = await secureFetch(`${API_BASE}/cloud-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlist_name, image, tracks })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to create cloud download session.');
+    }
+    return data;
+  },
+
+  /**
+   * Retrieves songs JSON by 6-digit session code (e.g. TF-4982)
+   */
+  async getCloudSession(code) {
+    const res = await secureFetch(`${API_BASE}/cloud-session/${encodeURIComponent(code.trim().toUpperCase())}`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Download session code not found or has expired.');
+    }
+    return data.session;
+  },
+
+  /**
+   * Sends the songs JSON directly to local TuneFetch.exe running on 127.0.0.1:8000
+   */
+  async sendToLocalDesktop({ playlist_name, tracks, format = 'mp3-320' }) {
+    const res = await fetch('http://127.0.0.1:8000/api/local/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlist_name, tracks, format })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to dispatch to local TuneFetch desktop engine.');
+    }
+    return data;
+  },
+
+  /**
+   * Tells local TuneFetch.exe to fetch code TF-XXXX from cloud and start downloading
+   */
+  async importSessionToLocalDesktop(session_code, format = 'mp3-320') {
+    const res = await fetch('http://127.0.0.1:8000/api/local/import-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_code, format })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to import session code into local desktop app.');
+    }
+    return data;
+  },
+
+  /**
+   * Polls local desktop batch download progress
+   */
+  async getLocalBatchProgress(batchId) {
+    const res = await fetch(`http://127.0.0.1:8000/api/local/progress/${batchId}`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to fetch local download progress.');
+    }
+    return data.batch;
   }
 };
+

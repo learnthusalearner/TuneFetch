@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { X, Search, Music, Download, Clock, Disc3, Loader2, CheckSquare, Square, FolderDown } from 'lucide-react';
+import {
+  X, Search, Music, Download, Clock, Disc3, Loader2, CheckSquare,
+  Square, FolderDown, Laptop, Copy, Check, ExternalLink, ShieldCheck, Sparkles
+} from 'lucide-react';
 import { AUDIO_FORMATS } from '../../constants';
+import { api } from '../../services/api';
 
 export default function PlaylistTracksModal({
   playlist,
@@ -16,6 +20,12 @@ export default function PlaylistTracksModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('mp3-320');
   const [selectedTrackIds, setSelectedTrackIds] = useState(new Set());
+  const [isDispatchingDesktop, setIsDispatchingDesktop] = useState(false);
+  const [desktopSuccessMsg, setDesktopSuccessMsg] = useState(null);
+  const [cloudSessionCode, setCloudSessionCode] = useState(null);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   if (!isOpen) return null;
 
@@ -61,6 +71,72 @@ export default function PlaylistTracksModal({
   const handleBatchDownloadClick = () => {
     const trackIdsArray = selectedTrackIds.size > 0 ? Array.from(selectedTrackIds) : null;
     onStartDownload(playlist?.id, selectedFormat, trackIdsArray);
+  };
+
+  const getActiveTrackList = () => {
+    if (selectedTrackIds.size > 0) {
+      return (tracks || []).filter((t) => selectedTrackIds.has(t.id || t.spotifyTrackId));
+    }
+    return tracks || [];
+  };
+
+  const handleDesktopDownloadClick = async () => {
+    setIsDispatchingDesktop(true);
+    setDesktopSuccessMsg(null);
+    const targetTracks = getActiveTrackList();
+
+    try {
+      // 1. Check if TuneFetch Desktop is open on localhost:8000
+      const desktop = await api.checkLocalDesktopStatus();
+      if (desktop.isRunning) {
+        await api.sendToLocalDesktop({
+          playlist_name: playlist?.name || 'Spotify Playlist',
+          tracks: targetTracks,
+          format: selectedFormat
+        });
+        setDesktopSuccessMsg(`⚡ Successfully sent ${targetTracks.length} tracks to TuneFetch Desktop! Files are downloading to your PC's Downloads/TuneFetch folder.`);
+        return;
+      }
+
+      // 2. If desktop not open, generate cloud session code
+      const sessionData = await api.createCloudSession({
+        playlist_name: playlist?.name || 'Spotify Playlist',
+        image: playlist?.image || '',
+        tracks: targetTracks
+      });
+      setCloudSessionCode(sessionData.session_code);
+      setShowSessionModal(true);
+    } catch (err) {
+      console.warn('Local desktop check failed, generating session code:', err);
+      try {
+        const sessionData = await api.createCloudSession({
+          playlist_name: playlist?.name || 'Spotify Playlist',
+          image: playlist?.image || '',
+          tracks: targetTracks
+        });
+        setCloudSessionCode(sessionData.session_code);
+        setShowSessionModal(true);
+      } catch (err2) {
+        alert('Could not start download: ' + (err2.message || err.message));
+      }
+    } finally {
+      setIsDispatchingDesktop(false);
+    }
+  };
+
+  const handleCopyCode = () => {
+    if (!cloudSessionCode) return;
+    navigator.clipboard.writeText(cloudSessionCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2500);
+  };
+
+  const handleCopyJson = () => {
+    const targetTracks = getActiveTrackList();
+    const jsonStr = JSON.stringify(targetTracks, null, 2);
+    navigator.clipboard.writeText(jsonStr);
+    setCopiedJson(true);
+    setTimeout(() => setCopiedJson(false), 2500);
   };
 
   return (
@@ -220,32 +296,99 @@ export default function PlaylistTracksModal({
               ))}
             </select>
 
-            {/* Batch Folder Download Button */}
+            {/* Desktop Direct Local Download Button (Recommended) */}
             <button
               className="btn-download-action"
-              onClick={handleBatchDownloadClick}
-              disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
-              style={{ padding: '10px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              onClick={handleDesktopDownloadClick}
+              disabled={isLoadingTracks || isDispatchingDesktop || !tracks || tracks.length === 0}
+              style={{
+                padding: '10px 18px',
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+                boxShadow: '0 4px 18px rgba(29, 185, 84, 0.4)'
+              }}
+              title="Download on your PC via TuneFetch Desktop (Zero bot limits & 100% full speed)"
             >
-              {isStartingDownload ? (
+              {isDispatchingDesktop ? (
                 <>
                   <Loader2 size={16} className="spinner" />
-                  <span>Preparing Folder...</span>
-                </>
-              ) : selectedTrackIds.size > 0 ? (
-                <>
-                  <FolderDown size={16} />
-                  <span>Download Selected Folder ({selectedTrackIds.size} Songs)</span>
+                  <span>Connecting Desktop...</span>
                 </>
               ) : (
                 <>
-                  <FolderDown size={16} />
-                  <span>Download All as Folder ({tracks?.length || 0} Songs)</span>
+                  <Laptop size={16} />
+                  <span>
+                    {selectedTrackIds.size > 0
+                      ? `Download on My PC (${selectedTrackIds.size})`
+                      : `Download on My PC (${tracks?.length || 0})`}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* Cloud Server ZIP Download Button */}
+            <button
+              onClick={handleBatchDownloadClick}
+              disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
+              style={{
+                padding: '9px 15px',
+                fontSize: '12px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid var(--border-glass)',
+                borderRadius: '8px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+              title="Download packaged ZIP archive from cloud server"
+            >
+              {isStartingDownload ? (
+                <>
+                  <Loader2 size={14} className="spinner" />
+                  <span>Preparing ZIP...</span>
+                </>
+              ) : (
+                <>
+                  <FolderDown size={14} />
+                  <span>Cloud ZIP</span>
                 </>
               )}
             </button>
           </div>
         </div>
+
+        {/* Desktop Success Alert Banner */}
+        {desktopSuccessMsg && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              color: '#6ee7b7',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px'
+            }}
+          >
+            <span>{desktopSuccessMsg}</span>
+            <button
+              type="button"
+              onClick={() => setDesktopSuccessMsg(null)}
+              style={{ background: 'none', border: 'none', color: '#6ee7b7', cursor: 'pointer', fontSize: '16px' }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Tracks List */}
         <div
@@ -404,30 +547,237 @@ export default function PlaylistTracksModal({
             )}
           </div>
 
-          <button
-            className="btn-download-action"
-            onClick={handleBatchDownloadClick}
-            disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
-            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-          >
-            {isStartingDownload ? (
-              <>
-                <Loader2 size={16} className="spinner" />
-                <span>Preparing Folder...</span>
-              </>
-            ) : (
-              <>
-                <FolderDown size={18} />
-                <span>
-                  {selectedTrackIds.size > 0
-                    ? `Download Selected Folder (${selectedTrackIds.size} Songs)`
-                    : `Download All Songs as Folder (${tracks?.length || 0})`}
-                </span>
-              </>
-            )}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Desktop Direct Local Download Button */}
+            <button
+              className="btn-download-action"
+              onClick={handleDesktopDownloadClick}
+              disabled={isLoadingTracks || isDispatchingDesktop || !tracks || tracks.length === 0}
+              style={{
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+                boxShadow: '0 4px 20px rgba(29, 185, 84, 0.4)'
+              }}
+              title="Download full playlist directly onto your computer with zero bot blocks"
+            >
+              {isDispatchingDesktop ? (
+                <>
+                  <Loader2 size={16} className="spinner" />
+                  <span>Connecting Desktop...</span>
+                </>
+              ) : (
+                <>
+                  <Laptop size={18} />
+                  <span>
+                    {selectedTrackIds.size > 0
+                      ? `Download on My PC (${selectedTrackIds.size} Songs)`
+                      : `Download on My PC (${tracks?.length || 0} Songs)`}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* Cloud Server ZIP Download Button */}
+            <button
+              onClick={handleBatchDownloadClick}
+              disabled={isLoadingTracks || isStartingDownload || !tracks || tracks.length === 0}
+              style={{
+                padding: '11px 18px',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-glass)',
+                borderRadius: '8px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+              title="Download packaged ZIP from cloud server"
+            >
+              <FolderDown size={16} />
+              <span>Cloud ZIP</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ─── CLOUD SESSION CODE POPUP MODAL ───────────────────────── */}
+      {showSessionModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(5, 7, 12, 0.92)',
+            backdropFilter: 'blur(16px)',
+            zIndex: 100000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={() => setShowSessionModal(false)}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              padding: '28px',
+              background: '#111726',
+              border: '1px solid rgba(29, 185, 84, 0.35)',
+              borderRadius: '16px',
+              boxShadow: '0 25px 70px rgba(0, 0, 0, 0.8), 0 0 40px rgba(29, 185, 84, 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
+                  <Laptop size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>
+                    Download on Your PC
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '3px 0 0 0' }}>
+                    Zero setup • No bot blocks • 320kbps MP3
+                  </p>
+                </div>
+              </div>
+              <button
+                className="icon-btn"
+                onClick={() => setShowSessionModal(false)}
+                style={{ borderRadius: '50%', padding: '6px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Code Box */}
+            <div
+              style={{
+                padding: '20px',
+                borderRadius: '12px',
+                background: 'rgba(29, 185, 84, 0.08)',
+                border: '1.5px dashed rgba(29, 185, 84, 0.4)',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, color: '#1DB954' }}>
+                YOUR DOWNLOAD SESSION CODE
+              </span>
+              <div style={{ fontSize: '36px', fontWeight: 900, letterSpacing: '4px', color: '#fff', fontFamily: 'monospace' }}>
+                {cloudSessionCode}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 20px',
+                  borderRadius: '20px',
+                  background: copiedCode ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                  border: copiedCode ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.2)',
+                  color: copiedCode ? '#6ee7b7' : '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {copiedCode ? <Check size={15} /> : <Copy size={15} />}
+                <span>{copiedCode ? 'Copied Code!' : 'Copy Code'}</span>
+              </button>
+            </div>
+
+            {/* Steps */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
+                  1
+                </span>
+                <span>
+                  Launch <strong>TuneFetch.exe</strong> (or double-click <code>run_tunefetch.bat</code>) on your computer.
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
+                  2
+                </span>
+                <span>
+                  Enter Code <strong>{cloudSessionCode}</strong> into the TuneFetch window.
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
+                  3
+                </span>
+                <span>
+                  All songs will download at full home speed directly into your <code>Downloads\TuneFetch</code> folder!
+                </span>
+              </div>
+            </div>
+
+            {/* Alternative Copy JSON Button */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
+              <button
+                type="button"
+                onClick={handleCopyJson}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: copiedJson ? '#6ee7b7' : 'var(--text-muted)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                {copiedJson ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copiedJson ? 'Copied Songs JSON!' : 'Copy raw Songs JSON'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSessionModal(false)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid var(--border-glass)',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

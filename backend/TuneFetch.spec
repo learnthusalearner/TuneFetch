@@ -17,9 +17,7 @@ datas = [
     (ffmpeg_bin_dir, 'imageio_ffmpeg/binaries'),
 ]
 
-env_path = os.path.join(base_dir, '.env')
-if os.path.isfile(env_path):
-    datas.append((env_path, '.'))
+# Note: .env is intentionally omitted to keep all server credentials private
 
 hiddenimports = [
     'uvicorn',
@@ -49,12 +47,15 @@ hiddenimports = [
     'app.routes.health',
     'app.routes.media',
     'app.routes.spotify',
+    'app.routes.cloud_session',
     'app.services',
     'app.services.downloader',
     'app.services.user_cookie_store',
     'app.services.spotify_service',
     'app.services.playlist_pipeline',
     'app.services.serper_service',
+    'app.services.cloud_session_store',
+    'app.services.local_batch_downloader',
     'app.utils',
     'app.utils.auth_helper',
     'app.utils.sanitizer',

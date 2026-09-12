@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from app.routes.health import router as health_router
 from app.routes.media import router as media_router
 from app.routes.spotify import router as spotify_router
+from app.routes.cloud_session import router as cloud_session_router
 from app.core.config import APP_TITLE, APP_DESCRIPTION, APP_VERSION, CORS_ORIGINS, BASE_DIR
 from app.core.database import init_db
 
@@ -75,10 +76,18 @@ def create_app() -> FastAPI:
         expose_headers=["Content-Disposition", "X-User-Id", "x-user-id"]
     )
 
+    @app.middleware("http")
+    async def add_private_network_headers(request: Request, call_next):
+        response = await call_next(request)
+        if request.headers.get("access-control-request-private-network"):
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
     # Register modular route controllers
     app.include_router(health_router)
     app.include_router(media_router)
     app.include_router(spotify_router)
+    app.include_router(cloud_session_router)
 
     # Detect compiled frontend
     dist_dir = _find_frontend_dist()
