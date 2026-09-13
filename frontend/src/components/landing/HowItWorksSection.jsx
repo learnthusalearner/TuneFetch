@@ -35,16 +35,19 @@ export default function HowItWorksSection({ onLaunch }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Automated terminal simulation ticker
+  // Step-aware automated terminal simulation ticker
   useEffect(() => {
     if (!isPlaying) return;
 
-    const interval = setInterval(() => {
-      setSimStep((prev) => (prev < 6 ? prev + 1 : 0));
-    }, 1800);
+    // Step-aware pacing: brief at typing/start, longer at completion
+    const delay = simStep === 6 ? 4200 : simStep === 0 ? 1200 : 1700;
 
-    return () => clearInterval(interval);
-  }, [isPlaying]);
+    const timeout = setTimeout(() => {
+      setSimStep((prev) => (prev < 6 ? prev + 1 : 0));
+    }, delay);
+
+    return () => clearTimeout(timeout);
+  }, [isPlaying, simStep]);
 
   const restartSimulation = () => {
     setSimStep(0);
@@ -230,14 +233,37 @@ export default function HowItWorksSection({ onLaunch }) {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '3px 10px',
-                  background: 'rgba(29, 185, 84, 0.12)',
+                  padding: '3px 12px',
+                  background: simStep === 6 ? 'rgba(29, 185, 84, 0.16)' : 'rgba(56, 189, 248, 0.12)',
                   borderRadius: '12px',
-                  border: '1px solid rgba(29, 185, 84, 0.3)'
+                  border: simStep === 6 ? '1px solid rgba(29, 185, 84, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)'
                 }}
               >
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#1DB954', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1DB954' }}>SIMULATION READY</span>
+                <span
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: simStep === 6 ? '#10b981' : '#38bdf8',
+                    animation: isPlaying ? 'pulse 1.5s infinite' : 'none'
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: simStep === 6 ? '#10b981' : '#38bdf8',
+                    letterSpacing: '0.03em'
+                  }}
+                >
+                  {simStep === 0 && 'INITIALIZING PROMPT...'}
+                  {simStep === 1 && 'CLI ENGINE ACTIVE'}
+                  {simStep === 2 && 'VERIFYING SESSION KEY'}
+                  {simStep === 3 && 'DOWNLOADING TRACK 1/24'}
+                  {simStep === 4 && 'STREAMING TRACK 2/24'}
+                  {simStep === 5 && 'CONVERTING TRACK 3/24'}
+                  {simStep === 6 && 'ALL TRACKS CONVERTED (100%)'}
+                </span>
               </div>
 
               <button
@@ -285,7 +311,7 @@ export default function HowItWorksSection({ onLaunch }) {
           </div>
 
           {/* Terminal Screen Body */}
-          <TuneFetchTerminal showControls={false} />
+          <TuneFetchTerminal showControls={false} simStep={simStep} />
 
           {/* Terminal Bottom Explainer Banner */}
           <div

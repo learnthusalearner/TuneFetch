@@ -2,7 +2,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Music, ArrowRight, CheckCircle, Zap, Layers, Radio } from 'lucide-react';
 import StarfieldBg from '../layout/StarfieldBg';
+import GithubIcon from '../ui/GithubIcon';
 import { api } from '../../services/api';
+
 
 // Direct 100% reliable PNG imports
 import image1Png from '../../assets/image.png';
@@ -93,6 +95,33 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
             <span>{isConnected ? 'Open Dashboard Workspace' : 'Launch Web App Dashboard'}</span>
             <ArrowRight size={16} />
           </motion.button>
+
+          <motion.a
+            href="https://github.com/learnthusalearner/TuneFetch"
+            target="_blank"
+            rel="noopener noreferrer"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '9px',
+              padding: '14px 24px',
+              borderRadius: '14px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              color: '#ffffff',
+              fontSize: '15px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              backdropFilter: 'blur(8px)',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)'
+            }}
+          >
+            <GithubIcon size={18} />
+            <span>Star on GitHub</span>
+          </motion.a>
 
           <motion.div
             style={{
