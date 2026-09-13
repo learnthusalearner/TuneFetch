@@ -16,7 +16,6 @@ logger = logging.getLogger("cloud_session_route")
 
 router = APIRouter(tags=["Cloud Session & Local Downloader"])
 
-CLOUD_BACKEND_URL = os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com").rstrip("/")
 
 class CreateSessionRequest(BaseModel):
     playlist_name: str

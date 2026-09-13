@@ -51,15 +51,12 @@ def get_frontend_url(request: Request, state: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
-    if "onrender.com" in host or bool(os.getenv("RENDER")) or os.getenv("ENVIRONMENT") == "production":
-        return "https://tune-fetch-tan.vercel.app"
-
     env_url = os.getenv("FRONTEND_URL", "")
     if env_url:
         return env_url.rstrip("/")
 
     return FRONTEND_URL or "http://localhost:5173"
+
 
 @router.get("/auth")
 def spotify_auth_start(

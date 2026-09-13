@@ -281,29 +281,34 @@ You can run `tunefetch` from any folder or terminal:
 | `tunefetch --help` | Show usage options and current download folder |
 | `python download.py TF-XXXX` | Direct script execution fallback |
 
-### Live Terminal Downloader Preview
-```
+### 🖥️ Live Terminal Downloader Preview
+
+```text
 $ tunefetch TF-8429
 
-============================================================
-             TuneFetch CLI Engine v1.3.0
-   Spotify Playlist & High-Fidelity Audio Downloader
-============================================================
+ ╭────────────────────────────────────────────────────────────╮
+ │  ♫ TuneFetch CLI Engine v1.3.0                             │
+ │  High-Fidelity Spotify Playlist & 320 kbps MP3 Downloader  │
+ ╰────────────────────────────────────────────────────────────╯
 
-[+] Resolving download session for code: TF-8429...
-[✓] Session Verified: "Late Night Lo-Fi Chillout" (24 Tracks Verified)
-[+] Destination Folder: Downloads/Thanks for downloading/Late Night Lo-Fi Chillout
+ [•] Resolving download session: TF-8429...
+ [✓] Session Verified: "Late Night Lo-Fi Chillout" (24 Tracks Verified)
+ [→] Destination: Downloads/Thanks for downloading/Late Night Lo-Fi Chillout
 
-[+] [1/24] Petit Biscuit - Sunset Lover                     [COMPLETED ✓]
-    ↳ 320 kbps CBR MP3 · Album Art Embedded · Saved
-[+] [2/24] M83 - Midnight City                              [COMPLETED ✓]
-    ↳ 320 kbps CBR MP3 · Album Art Embedded · Saved
-[+] [3/24] The Weeknd - Blinding Lights         92% |  9.4 MB/s | ETA: 00:01
-[██████████████████████████████████░░░░] 92%
+ [+] [1/24] Petit Biscuit - Sunset Lover              [✓ COMPLETED]
+     ↳ 320 kbps CBR MP3 · 8.4 MB · Album Art Embedded · Saved
+ [+] [2/24] M83 - Midnight City                       [✓ COMPLETED]
+     ↳ 320 kbps CBR MP3 · 9.1 MB · Album Art Embedded · Saved
+ [↓] [3/24] The Weeknd - Blinding Lights   92% |  9.4 MB/s | ETA: 00:01
+     [██████████████████████████████░░░░] 92%
 
-[✓] 24 of 24 tracks converted successfully at 320 kbps!
-Total Time: 01:14 · Destination: Downloads/Thanks for downloading/Late Night Lo-Fi Chillout
+ ╭────────────────────────────────────────────────────────────╮
+ │  ✓ All 24 of 24 tracks converted successfully at 320 kbps! │
+ │  ⏱  Total Time: 01:14 · Bitrate: 320 kbps CBR              │
+ │  📂 Saved To: Downloads/Thanks for downloading/...         │
+ ╰────────────────────────────────────────────────────────────╯
 ```
+
 
 ---
 

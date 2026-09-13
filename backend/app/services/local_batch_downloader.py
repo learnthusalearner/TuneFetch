@@ -36,15 +36,16 @@ def _report_broken_track_to_backend(song_name: str, artist_name: str, error_msg:
 
     try:
         import httpx
-        cloud_url = os.getenv("TUNEFETCH_CLOUD_API_URL", os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com")).rstrip("/")
-        prod_url = f"{cloud_url}/spotify/tracks/report-broken"
+        backend_url = os.getenv("BACKEND_URL", os.getenv("TUNEFETCH_BACKEND_URL", os.getenv("TUNEFETCH_CLOUD_API_URL", os.getenv("RENDER_EXTERNAL_URL", "http://127.0.0.1:8000")))).rstrip("/")
+        report_url = f"{backend_url}/spotify/tracks/report-broken"
         httpx.post(
-            prod_url,
+            report_url,
             json={"song_name": song_name, "artist_name": artist_name, "error_message": error_msg},
             timeout=5.0
         )
     except Exception:
         pass
+
 
 class LocalBatchDownloader:
     @classmethod

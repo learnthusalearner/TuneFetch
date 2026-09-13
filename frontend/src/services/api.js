@@ -3,8 +3,9 @@ export const BACKEND_URL = RAW_BACKEND_URL.replace(/\/+$/, '');
 export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 export const SPOTIFY_BASE = BACKEND_URL ? `${BACKEND_URL}/spotify` : '/spotify';
 
-export const CLOUD_WEB_URL = 'https://tune-fetch-tan.vercel.app';
-export const CLOUD_BACKEND_URL = 'https://tunefetch-t5mp.onrender.com';
+export const CLOUD_WEB_URL = import.meta.env.VITE_FRONTEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+export const CLOUD_BACKEND_URL = BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8000');
+
 
 /**
  * Retrieves the persisted client-side user UUID.

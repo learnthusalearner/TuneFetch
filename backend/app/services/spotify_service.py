@@ -46,8 +46,8 @@ def resolve_redirect_uri(request: Optional[Any] = None) -> str:
     """
     Dynamically determines the correct Spotify Redirect URI.
     1. If request is provided, reconstruct from incoming headers (reverse proxy aware).
-    2. If explicit production SPOTIFY_REDIRECT_URI is set, use it.
-    3. If running on Render or production, default to https://tunefetch-t5mp.onrender.com/spotify/callback.
+    2. If explicit SPOTIFY_REDIRECT_URI is set, use it.
+    3. If running in cloud environment, use BACKEND_URL or RENDER_EXTERNAL_URL.
     4. Fallback to SPOTIFY_REDIRECT_URI or http://127.0.0.1:8000/spotify/callback.
     """
     if request is not None:
@@ -55,20 +55,20 @@ def resolve_redirect_uri(request: Optional[Any] = None) -> str:
             proto = request.headers.get("x-forwarded-proto", getattr(request.url, "scheme", "https"))
             host = request.headers.get("x-forwarded-host", request.headers.get("host", getattr(request.url, "netloc", "")))
             if host:
-                host_clean = host.split(":")[0] if "onrender.com" in host else host
-                return f"{proto}://{host_clean}/spotify/callback"
+                return f"{proto}://{host}/spotify/callback"
         except Exception:
             pass
 
     env_uri = os.getenv("SPOTIFY_REDIRECT_URI", "")
-    if env_uri and "127.0.0.1" not in env_uri and "localhost" not in env_uri:
+    if env_uri:
         return env_uri
 
-    if bool(os.getenv("RENDER")) or os.getenv("ENVIRONMENT") == "production":
-        render_url = os.getenv("RENDER_EXTERNAL_URL", "https://tunefetch-t5mp.onrender.com").rstrip("/")
-        return f"{render_url}/spotify/callback"
+    cloud_url = os.getenv("BACKEND_URL", os.getenv("RENDER_EXTERNAL_URL", "")).rstrip("/")
+    if cloud_url:
+        return f"{cloud_url}/spotify/callback"
 
     return SPOTIFY_REDIRECT_URI or "http://127.0.0.1:8000/spotify/callback"
+
 
 def _encode_oauth_state(user_id: str, code_verifier: str, redirect_uri: str = "", frontend_url: str = "") -> str:
     """Generates a clean URL-safe OAuth state token and stores parameters in memory store."""

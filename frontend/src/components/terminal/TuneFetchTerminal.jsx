@@ -118,43 +118,46 @@ export default function TuneFetchTerminal({
           />
         </div>
 
-        {/* Double-Line Green Banner */}
-        <div style={{ color: '#10b981', marginBottom: '16px', whiteSpace: 'pre', fontSize: '13px', lineHeight: 1.45 }}>
-{`============================================================
-           TuneFetch CLI Engine v1.3.0
-   Spotify Playlist & High-Fidelity Audio Downloader
-============================================================`}
+        {/* Modern Rounded Box Banner */}
+        <div style={{ color: '#1db954', marginBottom: '16px', whiteSpace: 'pre', fontSize: '13px', lineHeight: 1.4, fontFamily: 'monospace' }}>
+{` ╭────────────────────────────────────────────────────────────╮
+ │  ♫ TuneFetch CLI Engine v1.3.0                             │
+ │  High-Fidelity Spotify Playlist & 320 kbps MP3 Downloader  │
+ ╰────────────────────────────────────────────────────────────╯`}
         </div>
 
-        {/* Stage 1: Contacting API */}
-        <div style={{ color: '#38bdf8', marginBottom: '8px' }}>
-          [+] Contacting Neon Cloud Session API for code:{' '}
+        {/* Stage 1: Resolving Session */}
+        <div style={{ color: '#94a3b8', marginBottom: '8px' }}>
+          <span style={{ color: '#38bdf8', fontWeight: 700 }}> [•]</span> Resolving download session:{' '}
           <strong style={{ color: '#ffffff' }}>{sessionCode}</strong>...
         </div>
 
         {/* Stage 2: Session Verified */}
-        <div style={{ color: '#c084fc', marginBottom: '8px' }}>
-          [✓] Session Verified: &quot;{playlistName}&quot; ({trackCount} Tracks Verified)
+        <div style={{ color: '#e2e8f0', marginBottom: '8px' }}>
+          <span style={{ color: '#1db954', fontWeight: 700 }}> [✓]</span> Session Verified:{' '}
+          <span style={{ color: '#c084fc', fontWeight: 700 }}>&quot;{playlistName}&quot;</span>{' '}
+          <span style={{ color: '#38bdf8' }}>({trackCount} Tracks Verified)</span>
         </div>
 
         {/* Stage 3: Destination Folder */}
-        <div style={{ color: '#38bdf8', marginBottom: '16px' }}>
-          [+] Destination Folder:{' '}
-          <span style={{ color: '#ffffff' }}>{destinationPath}</span>
+        <div style={{ color: '#94a3b8', marginBottom: '18px' }}>
+          <span style={{ color: '#38bdf8', fontWeight: 700 }}> [→]</span> Destination:{' '}
+          <span style={{ color: '#f8fafc' }}>{destinationPath}</span>
         </div>
 
         {/* Track 1: Completed */}
         <div style={{ marginBottom: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span style={{ color: '#ffffff' }}>
-              <span style={{ color: '#38bdf8' }}>[+]</span> [1/{trackCount}] {firstTrack}
+              <span style={{ color: '#1db954', fontWeight: 700 }}> [+]</span>{' '}
+              <span style={{ color: '#64748b' }}>[1/{trackCount}]</span> {firstTrack}
             </span>
-            <span style={{ color: '#10b981', fontWeight: 700, fontSize: '13px' }}>
-              [COMPLETED ✓]
+            <span style={{ color: '#1db954', fontWeight: 700, fontSize: '12.5px', background: 'rgba(29, 185, 84, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(29, 185, 84, 0.25)' }}>
+              ✓ COMPLETED
             </span>
           </div>
-          <div style={{ color: '#64748b', fontSize: '12px', paddingLeft: '18px', marginTop: '2px' }}>
-            ↳ 320 kbps CBR MP3 · 8.4 MB · Album Art Embedded · Saved
+          <div style={{ color: '#64748b', fontSize: '12px', paddingLeft: '22px', marginTop: '3px' }}>
+            <span style={{ color: '#1db954' }}>↳</span> <span style={{ color: '#1ed760' }}>320 kbps CBR MP3</span> · 8.4 MB · Album Art Embedded · Saved
           </div>
         </div>
 
@@ -162,46 +165,40 @@ export default function TuneFetchTerminal({
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '6px' }}>
             <span style={{ color: '#ffffff' }}>
-              <span style={{ color: '#38bdf8' }}>[+]</span> [2/{trackCount}] {secondTrack}
+              <span style={{ color: '#38bdf8', fontWeight: 700 }}> [↓]</span>{' '}
+              <span style={{ color: '#64748b' }}>[2/{trackCount}]</span> {secondTrack}
             </span>
-            <span style={{ color: '#38bdf8', fontSize: '13px' }}>
-              92% | 9.4 MB/s | ETA: 00:01
+            <span style={{ fontSize: '12.5px' }}>
+              <strong style={{ color: '#1db954' }}>92%</strong>{' '}
+              <span style={{ color: '#475569' }}>|</span>{' '}
+              <strong style={{ color: '#facc15' }}>9.4 MB/s</strong>{' '}
+              <span style={{ color: '#475569' }}>|</span>{' '}
+              <span style={{ color: '#38bdf8' }}>ETA: 00:01</span>
             </span>
           </div>
           {/* Visual Progress Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-            <span style={{ color: '#10b981' }}>[</span>
-            <span style={{ color: '#10b981', letterSpacing: '0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', paddingLeft: '14px' }}>
+            <span style={{ color: '#475569' }}>[</span>
+            <span style={{ color: '#1db954', letterSpacing: '0.02em' }}>
               ██████████████████████████████████
             </span>
-            <span style={{ color: 'rgba(16, 185, 129, 0.25)', letterSpacing: '0.02em' }}>
+            <span style={{ color: '#334155', letterSpacing: '0.02em' }}>
               ░░░░
             </span>
-            <span style={{ color: '#10b981' }}>]</span>
-            <span style={{ color: '#10b981', fontWeight: 700 }}>92%</span>
+            <span style={{ color: '#475569' }}>]</span>
+            <span style={{ color: '#1db954', fontWeight: 700 }}>92%</span>
           </div>
         </div>
 
-        {/* Completion Box */}
-        <div
-          style={{
-            marginTop: '22px',
-            padding: '14px 20px',
-            borderRadius: '10px',
-            background: 'rgba(6, 78, 59, 0.14)',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px'
-          }}
-        >
-          <div style={{ color: '#10b981', fontWeight: 700, fontSize: '13.5px' }}>
-            [✓] {trackCount} of {trackCount} tracks converted successfully at 320 kbps!
-          </div>
-          <div style={{ fontSize: '12px', color: '#6ee7b7', opacity: 0.85 }}>
-            Total Time: 01:14 · Destination: {destinationPath}
-          </div>
+        {/* Modern Completion Card */}
+        <div style={{ color: '#1db954', marginTop: '20px', whiteSpace: 'pre', fontSize: '12.5px', lineHeight: 1.45, fontFamily: 'monospace' }}>
+{` ╭────────────────────────────────────────────────────────────╮
+ │  ✓ All ${trackCount} of ${trackCount} tracks converted successfully at 320 kbps!  │
+ │  ⏱  Total Time: 01:14 · Bitrate: 320 kbps CBR              │
+ │  📂 Saved To: Downloads/Thanks for downloading/...         │
+ ╰────────────────────────────────────────────────────────────╯`}
         </div>
+
       </div>
     </div>
   );
