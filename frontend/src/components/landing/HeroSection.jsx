@@ -107,21 +107,21 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
-              padding: '15px 28px',
+              padding: '15px 30px',
               borderRadius: '14px',
-              background: 'rgba(255, 255, 255, 0.07)',
-              border: '1px solid rgba(255, 255, 255, 0.18)',
-              color: '#ffffff',
+              background: '#ffffff',
+              color: '#090d16',
               fontSize: '15.5px',
-              fontWeight: 700,
+              fontWeight: 800,
               textDecoration: 'none',
-              backdropFilter: 'blur(10px)',
               cursor: 'pointer',
-              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.35)'
+              border: 'none',
+              boxShadow: '0 8px 30px rgba(255, 255, 255, 0.15), 0 4px 14px rgba(0, 0, 0, 0.35)',
+              transition: 'all 0.2s ease'
             }}
           >
-            <GithubIcon size={20} />
-            <span>GitHub Repository</span>
+            <GithubIcon size={20} style={{ color: '#090d16' }} />
+            <span style={{ color: '#090d16' }}>GitHub Repository</span>
           </motion.a>
         </motion.div>
 

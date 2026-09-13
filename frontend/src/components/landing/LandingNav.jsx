@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Music } from 'lucide-react';
-import GithubIcon from '../ui/GithubIcon';
 import { api } from '../../services/api';
 
 
@@ -40,20 +39,6 @@ export default function LandingNav({ onLaunch, onPrivacy, isConnected }) {
         <button className="landing-nav-link" onClick={onLaunch}>
           Dashboard Workspace
         </button>
-
-        <a
-          href="https://github.com/learnthusalearner/TuneFetch"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="landing-nav-link"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
-          title="Star and view on GitHub"
-        >
-          <GithubIcon size={15} />
-          <span>GitHub</span>
-        </a>
-
-
 
         <motion.button
           className="btn-primary"
