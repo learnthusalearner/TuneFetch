@@ -26,14 +26,14 @@ The system operates across two tightly integrated environments:
    - **Cloud Session Generator**: Bundles playlist songs into a clean session code (e.g. `TF-1560`) with an instant one-click terminal command (`tunefetch TF-1560`).
    - **API Rate Limiter**: Built-in sliding-window rate limiter protecting endpoints (120 req/min general, 30 req/min heavy operations) to ensure server stability.
 
-2. **💻 TuneFetch Desktop Engine & CLI (`TuneFetch.exe` / `TuneFetch_Setup.exe`)**:
-   - **Zero Setup Required**: End users never need Spotify API keys, databases, Python environments, or complex configurations.
-   - **Authentic Windows Installer Wizard**: Built with an authentic multi-stage installation progress bar (~10 seconds) and mandatory Terms of Service & Privacy Policy agreement validation before installation.
-   - **Real-Time Terminal Progress Reporting**: Features a live CLI progress bar (`[████████░░] 78%`), current transfer speed (e.g., `2.4 MB/s`), ETA countdown, and track-by-track status stamps.
-   - **Accurate Download Summaries**: Guarantees accurate post-download tallies (`[✓] Successfully processed 12 tracks (12 saved, 0 skipped)`).
-   - **Direct PC Folder Delivery**: All songs are downloaded directly into an organized directory on your computer:
+2. **💻 TuneFetch Global CLI Engine (`tunefetch TF-XXXX`)**:
+   - **Automatic 1-Command Setup**: Run `python install_cli.py` to automatically install all dependencies and register `tunefetch` globally in Windows PATH.
+   - **Universal Execution**: Run `tunefetch TF-XXXX` from ANY terminal folder without navigating into the project directory.
+   - **Real-Time Terminal Progress Reporting**: Features a live CLI progress bar (`[████████░░] 78%`), transfer speed (`2.4 MB/s`), ETA countdown, and track-by-track status stamps.
+   - **Accurate Download Summaries**: Guarantees post-download tallies (`[✓] 12 of 12 tracks converted successfully at 320 kbps`).
+   - **Direct PC Folder Delivery**: All songs are downloaded directly into:
      `Downloads/Thanks for downloading/{Playlist_Name}`
-     with pristine `{Artist} - {Song Title}.mp3` tagging, high-resolution album artwork, and zero ZIP extraction required!
+     with pristine `{Artist} - {Song Title}.mp3` tagging, high-resolution album artwork, and zero manual unzipping!
 
 ---
 
@@ -45,7 +45,7 @@ The system operates across two tightly integrated environments:
    - [Terminal CLI & Session Flow](#terminal-cli--session-flow)
 3. [📂 File-by-File Technical Specification](#-file-by-file-technical-specification)
    - [Backend Layer (`backend/app/`)](#backend-layer-backendapp)
-   - [Desktop & Installer Layer (`backend/`)](#desktop--installer-layer-backend)
+   - [CLI Entrypoint Layer (`install_cli.py` / `download.py`)](#cli-entrypoint-layer-install_clipy--downloadpy)
    - [Frontend Layer (`frontend/src/`)](#frontend-layer-frontendsrc)
 4. [🎨 Frontend Client & Clean Architecture](#-frontend-client--clean-architecture)
    - [Design Tokens & Usability](#design-tokens--usability)
@@ -65,7 +65,7 @@ The system operates across two tightly integrated environments:
     - [Environment Configuration (`.env`)](#3-environment-configuration-env)
     - [Running the Backend Locally](#4-running-the-backend-locally)
     - [Running the Frontend Locally](#5-running-the-frontend-locally)
-    - [Building Standalone Installer (`TuneFetch_Setup.exe`)](#6-building-standalone-installer-tunefetch_setupexe)
+    - [1-Command CLI Setup (`tunefetch TF-XXXX`)](#6-1-command-cli-setup-tunefetch-tf-xxxx)
 11. [🧪 Automated Testing Suite](#-automated-testing-suite)
 12. [🌐 Complete API Endpoints Reference](#-complete-api-endpoints-reference)
 13. [❓ Troubleshooting & Gotchas](#-troubleshooting--gotchas)
@@ -426,17 +426,20 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-### 6. Building Standalone Installer (`TuneFetch_Setup.exe`)
+### 6. 1-Command CLI Setup (`tunefetch TF-XXXX`)
 
-To compile the entire application into the standalone Windows installer:
+To set up the CLI downloader on any computer:
 ```bash
-python build_desktop_app.py
+python install_cli.py
 ```
 This automatically:
-1. Builds the React production bundle.
-2. Compiles `backend/launcher.py` into `dist/TuneFetch.exe`.
-3. Packages `TuneFetch.exe` into `dist/TuneFetch_Setup.exe` with the 10-second installer wizard.
-4. Copies the installer to `backend/static/TuneFetch_Setup.exe` so users can download it directly from the web app.
+1. Installs all required Python dependencies from `backend/requirements.txt`.
+2. Registers the `tunefetch` command globally in your Windows system PATH (`%LOCALAPPDATA%\Microsoft\WindowsApps\tunefetch.cmd`).
+3. Allows you to open ANY terminal prompt and run:
+   ```bash
+   tunefetch TF-XXXX
+   ```
+   All songs will download directly to: `Downloads/Thanks for downloading/<Playlist_Name>/` at 320 kbps MP3 with album artwork embedded.
 
 ---
 

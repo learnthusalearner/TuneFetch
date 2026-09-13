@@ -640,7 +640,7 @@ export default function PlaylistTracksModal({
                   1
                 </span>
                 <span>
-                  Launch <strong>TuneFetch.exe</strong> on your computer.
+                  First-time setup: Run <code>python install_cli.py</code> in the project folder.
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
@@ -648,7 +648,7 @@ export default function PlaylistTracksModal({
                   2
                 </span>
                 <span>
-                  Enter Code <strong>{cloudSessionCode}</strong> into the TuneFetch window.
+                  Open terminal anywhere and run: <code style={{ color: '#10b981', fontWeight: 700 }}>tunefetch {cloudSessionCode}</code>
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
@@ -659,33 +659,6 @@ export default function PlaylistTracksModal({
                   All songs will download at full home speed directly into your <code>Downloads\Thanks for downloading</code> folder!
                 </span>
               </div>
-            </div>
-
-            {/* Direct Download .exe installer button */}
-            <a
-              href={api.getInstallerDownloadUrl()}
-              download="TuneFetch_Setup.exe"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '12px 18px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
-                color: '#000',
-                fontSize: '13.5px',
-                fontWeight: 800,
-                textDecoration: 'none',
-                boxShadow: '0 4px 20px rgba(29, 185, 84, 0.45)'
-              }}
-            >
-              <Download size={18} />
-              <span>Download TuneFetch Desktop Setup (.exe)</span>
-            </a>
-
-            <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', lineHeight: '1.4', padding: '0 4px' }}>
-              🛡️ <strong>Windows SmartScreen Note:</strong> If Windows shows <em>"Protected your PC / Unknown Publisher"</em>, click <strong>"More info"</strong> → <strong>"Run anyway"</strong> (TuneFetch is 100% free open-source software).
             </div>
 
             {/* Terminal Command Quick Copy */}
