@@ -732,6 +732,7 @@ export default function PlaylistTracksModal({
                     trackCount={tracks?.length || 0}
                     tracks={tracks}
                     showControls={false}
+                    staticMode={true}
                   />
                 </div>
               )}

@@ -22,8 +22,9 @@ import TuneFetchTerminal from '../terminal/TuneFetchTerminal';
 export default function HowItWorksSection({ onLaunch }) {
   const [copied, setCopied] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
-  const [simStep, setSimStep] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [replayKey, setReplayKey] = useState(0);
+  const [statusLabel, setStatusLabel] = useState('TYPING COMMAND...');
+  const [isDone, setIsDone] = useState(false);
 
   // Command to run
   const commandText = "tunefetch TF-8429";
@@ -35,23 +36,15 @@ export default function HowItWorksSection({ onLaunch }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Step-aware automated terminal simulation ticker
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    // Step-aware pacing: brief at typing/start, longer at completion
-    const delay = simStep === 6 ? 4200 : simStep === 0 ? 1200 : 1700;
-
-    const timeout = setTimeout(() => {
-      setSimStep((prev) => (prev < 6 ? prev + 1 : 0));
-    }, delay);
-
-    return () => clearTimeout(timeout);
-  }, [isPlaying, simStep]);
+  const handleStatusUpdate = ({ phase, label }) => {
+    setStatusLabel(label);
+    setIsDone(phase === 'done');
+  };
 
   const restartSimulation = () => {
-    setSimStep(0);
-    setIsPlaying(true);
+    setReplayKey((k) => k + 1);
+    setStatusLabel('TYPING COMMAND...');
+    setIsDone(false);
   };
 
   const steps = [
@@ -233,10 +226,10 @@ export default function HowItWorksSection({ onLaunch }) {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '3px 12px',
-                  background: simStep === 6 ? 'rgba(29, 185, 84, 0.16)' : 'rgba(56, 189, 248, 0.12)',
+                  padding: '4px 12px',
+                  background: isDone ? 'rgba(29, 185, 84, 0.16)' : 'rgba(56, 189, 248, 0.12)',
                   borderRadius: '12px',
-                  border: simStep === 6 ? '1px solid rgba(29, 185, 84, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)'
+                  border: isDone ? '1px solid rgba(29, 185, 84, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)'
                 }}
               >
                 <span
@@ -244,25 +237,19 @@ export default function HowItWorksSection({ onLaunch }) {
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: simStep === 6 ? '#10b981' : '#38bdf8',
-                    animation: isPlaying ? 'pulse 1.5s infinite' : 'none'
+                    background: isDone ? '#10b981' : '#38bdf8',
+                    animation: 'pulse 1.2s infinite'
                   }}
                 />
                 <span
                   style={{
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: simStep === 6 ? '#10b981' : '#38bdf8',
+                    color: isDone ? '#10b981' : '#38bdf8',
                     letterSpacing: '0.03em'
                   }}
                 >
-                  {simStep === 0 && 'INITIALIZING PROMPT...'}
-                  {simStep === 1 && 'CLI ENGINE ACTIVE'}
-                  {simStep === 2 && 'VERIFYING SESSION KEY'}
-                  {simStep === 3 && 'DOWNLOADING TRACK 1/24'}
-                  {simStep === 4 && 'STREAMING TRACK 2/24'}
-                  {simStep === 5 && 'CONVERTING TRACK 3/24'}
-                  {simStep === 6 && 'ALL TRACKS CONVERTED (100%)'}
+                  {statusLabel}
                 </span>
               </div>
 
@@ -311,7 +298,11 @@ export default function HowItWorksSection({ onLaunch }) {
           </div>
 
           {/* Terminal Screen Body */}
-          <TuneFetchTerminal showControls={false} simStep={simStep} />
+          <TuneFetchTerminal
+            showControls={false}
+            replayKey={replayKey}
+            onStatusUpdate={handleStatusUpdate}
+          />
 
           {/* Terminal Bottom Explainer Banner */}
           <div

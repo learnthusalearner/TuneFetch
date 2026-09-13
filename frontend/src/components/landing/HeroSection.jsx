@@ -97,6 +97,7 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
           </motion.button>
 
           <motion.a
+            id="hero-cta-github"
             href="https://github.com/learnthusalearner/TuneFetch"
             target="_blank"
             rel="noopener noreferrer"
@@ -105,41 +106,23 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '9px',
-              padding: '14px 24px',
+              gap: '10px',
+              padding: '15px 28px',
               borderRadius: '14px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
+              background: 'rgba(255, 255, 255, 0.07)',
+              border: '1px solid rgba(255, 255, 255, 0.18)',
               color: '#ffffff',
-              fontSize: '15px',
-              fontWeight: 600,
+              fontSize: '15.5px',
+              fontWeight: 700,
               textDecoration: 'none',
-              backdropFilter: 'blur(8px)',
+              backdropFilter: 'blur(10px)',
               cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)'
+              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.35)'
             }}
           >
-            <GithubIcon size={18} />
-            <span>Star on GitHub</span>
+            <GithubIcon size={20} />
+            <span>GitHub Repository</span>
           </motion.a>
-
-          <motion.div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '14px 22px',
-              borderRadius: '14px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#cbd5e1',
-              fontSize: '14px',
-              fontFamily: 'monospace'
-            }}
-          >
-            <span style={{ color: '#94a3b8' }}>CLI Command:</span>
-            <code style={{ color: '#10b981', fontWeight: 700 }}>tunefetch TF-XXXX</code>
-          </motion.div>
         </motion.div>
 
         {/* Connected indicator */}
