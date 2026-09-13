@@ -7,8 +7,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-# Load environment variables from .env
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# Load environment variables from root or backend .env
+load_dotenv(BASE_DIR.parent / ".env")
+load_dotenv(BASE_DIR / ".env")
+
 
 # Application metadata
 APP_TITLE = "TuneFetch Audio Engine"

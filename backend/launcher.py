@@ -79,18 +79,18 @@ def format_progress_bar(progress_pct: float, width: int = 24) -> str:
 # SESSION RESOLUTION
 # ============================================================
 
-def fetch_session_from_cloud(clean_code: str) -> dict:
-    """Fetch session JSON from cloud Neon PostgreSQL API."""
-    endpoint = f"{CLOUD_API_URL}/api/cloud-session/{clean_code}"
+def fetch_session_from_endpoint(base_url: str, clean_code: str, timeout: float = 8.0) -> dict:
+    """Fetch session JSON from a given backend base URL."""
+    endpoint = f"{base_url.rstrip('/')}/api/cloud-session/{clean_code}"
     try:
         req = urllib.request.Request(
             endpoint,
             headers={"User-Agent": f"TuneFetch-CLI/{APP_VERSION}"}
         )
-        with urllib.request.urlopen(req, timeout=12) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
             return data.get("session") or {}
-    except Exception as err:
+    except Exception:
         return {}
 
 
@@ -110,7 +110,7 @@ def run_cli_mode(code: str):
         clean_code = f"TF-{clean_code}"
 
     print_banner()
-    print(f"[+] Contacting Neon Cloud Session API for code: {clean_code}...")
+    print(f"[+] Resolving download session for code: {clean_code}...")
 
     session = None
 
@@ -121,9 +121,14 @@ def run_cli_mode(code: str):
     except Exception:
         session = None
 
-    # 2. Fetch from cloud API
+    # 2. Check local running dev server (http://127.0.0.1:8000)
     if not session or not session.get("tracks"):
-        session = fetch_session_from_cloud(clean_code)
+        session = fetch_session_from_endpoint("http://127.0.0.1:8000", clean_code, timeout=1.5)
+
+    # 3. Fetch from configured cloud API
+    if not session or not session.get("tracks"):
+        session = fetch_session_from_endpoint(CLOUD_API_URL, clean_code, timeout=12.0)
+
 
     if not session or not session.get("tracks"):
         print(f"[!] Session code '{clean_code}' was not found or has expired.")
