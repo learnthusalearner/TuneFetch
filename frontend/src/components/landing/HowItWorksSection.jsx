@@ -303,33 +303,30 @@ export default function HowItWorksSection({ onLaunch }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <FolderDown size={18} color="#1DB954" />
               <span style={{ fontSize: '13px', color: '#cbd5e1' }}>
-                Files download directly into your official <strong>Windows Downloads</strong> folder.
+                Files download directly into your <strong>Downloads / Thanks for downloading</strong> folder.
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                Need the 1-click Windows Installer?
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12.5px', color: '#94a3b8' }}>
+                One-time setup command:
               </span>
-              <a
-                href={api.getInstallerDownloadUrl()}
-                download="TuneFetch_Setup.exe"
+              <code
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
                   padding: '7px 14px',
                   borderRadius: '8px',
-                  background: '#1DB954',
-                  color: '#000000',
+                  background: 'rgba(29, 185, 84, 0.15)',
+                  border: '1px solid rgba(29, 185, 84, 0.35)',
+                  color: '#10b981',
                   fontSize: '12.5px',
-                  fontWeight: 700,
-                  textDecoration: 'none'
+                  fontWeight: 700
                 }}
               >
-                <DownloadCloud size={14} />
-                <span>Get TuneFetch_Setup.exe</span>
-              </a>
+                python install_cli.py
+              </code>
             </div>
           </div>
         </div>

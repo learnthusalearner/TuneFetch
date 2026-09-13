@@ -388,7 +388,7 @@ export const api = {
   },
 
   /**
-   * Sends the songs JSON directly to local TuneFetch.exe running on 127.0.0.1:8000
+   * Sends the songs JSON directly to local TuneFetch CLI service running on 127.0.0.1:8000
    */
   async sendToLocalDesktop({ playlist_name, tracks, format = 'mp3-320' }) {
     const res = await fetch('http://127.0.0.1:8000/api/local/download', {
@@ -398,13 +398,13 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detail || 'Failed to dispatch to local TuneFetch desktop engine.');
+      throw new Error(data.detail || 'Failed to dispatch to local TuneFetch CLI engine.');
     }
     return data;
   },
 
   /**
-   * Tells local TuneFetch.exe to fetch code TF-XXXX from cloud and start downloading
+   * Tells local TuneFetch CLI to fetch code TF-XXXX from cloud and start downloading
    */
   async importSessionToLocalDesktop(session_code, format = 'mp3-320') {
     const res = await fetch('http://127.0.0.1:8000/api/local/import-session', {
@@ -414,13 +414,13 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detail || 'Failed to import session code into local desktop app.');
+      throw new Error(data.detail || 'Failed to import session code into local CLI.');
     }
     return data;
   },
 
   /**
-   * Polls local desktop batch download progress
+   * Polls local batch download progress
    */
   async getLocalBatchProgress(batchId) {
     const res = await fetch(`http://127.0.0.1:8000/api/local/progress/${batchId}`);
@@ -442,16 +442,6 @@ export const api = {
       console.warn('Could not open local folder:', e);
       return { success: false };
     }
-  },
-
-  /**
-   * Returns direct download URL for the compiled TuneFetch_Setup.exe installer
-   */
-  getInstallerDownloadUrl() {
-    if (BACKEND_URL) {
-      return `${BACKEND_URL}/api/download-installer`;
-    }
-    return `${CLOUD_BACKEND_URL}/api/download-installer`;
   }
 };
 

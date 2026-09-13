@@ -102,7 +102,7 @@ export default function TuneFetchTerminal({
       >
         {/* Prompt Line */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <span style={{ color: '#38bdf8', fontWeight: 700 }}>PS C:\Users\KIIT&gt;</span>
+          <span style={{ color: '#38bdf8', fontWeight: 700 }}>PS C:\Users\User&gt;</span>
           <span style={{ color: '#10b981', fontWeight: 700, fontSize: '14.5px' }}>
             {commandText}
           </span>
@@ -121,7 +121,7 @@ export default function TuneFetchTerminal({
         {/* Double-Line Green Banner */}
         <div style={{ color: '#10b981', marginBottom: '16px', whiteSpace: 'pre', fontSize: '13px', lineHeight: 1.45 }}>
 {`============================================================
-           TuneFetch Desktop Engine v1.3.0
+           TuneFetch CLI Engine v1.3.0
    Spotify Playlist & High-Fidelity Audio Downloader
 ============================================================`}
         </div>

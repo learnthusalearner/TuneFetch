@@ -68,40 +68,49 @@ export default function HeroSection({ onLaunch, scrollToComparison, isConnected,
           transition={{ duration: 0.5, delay: 0.34, ease: [0.16, 1, 0.3, 1] }}
           style={{ flexWrap: 'wrap', gap: '14px', justifyContent: 'center' }}
         >
-          <a
-            href={api.getInstallerDownloadUrl()}
-            download="TuneFetch_Setup.exe"
+          <motion.button
+            id="hero-cta-main"
+            className="btn-primary"
+            onClick={onLaunch}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            style={{
+              fontSize: '15.5px',
+              padding: '15px 32px',
+              gap: '10px',
+              fontWeight: 800,
+              background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
+              color: '#000',
+              borderRadius: '14px',
+              border: 'none',
+              boxShadow: '0 8px 30px rgba(29, 185, 84, 0.45)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center'
+            }}
+          >
+            <Music size={18} />
+            <span>{isConnected ? 'Open Dashboard Workspace' : 'Launch Web App Dashboard'}</span>
+            <ArrowRight size={16} />
+          </motion.button>
+
+          <motion.div
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '10px',
-              padding: '15px 32px',
+              gap: '8px',
+              padding: '14px 22px',
               borderRadius: '14px',
-              background: 'linear-gradient(135deg, #1DB954 0%, #10b981 100%)',
-              color: '#000',
-              fontSize: '15.5px',
-              fontWeight: 800,
-              textDecoration: 'none',
-              boxShadow: '0 8px 30px rgba(29, 185, 84, 0.45)',
-              transition: 'transform 0.2s'
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#cbd5e1',
+              fontSize: '14px',
+              fontFamily: 'monospace'
             }}
-            title="Download TuneFetch Desktop Installer Executable (.exe)"
           >
-            <span>Download Windows App (.exe)</span>
-          </a>
-
-          <motion.button
-            id="hero-cta-main"
-            className="btn-secondary"
-            onClick={onLaunch}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            style={{ fontSize: '15px', padding: '15px 28px', gap: '8px' }}
-          >
-            <Music size={18} />
-            {isConnected ? 'Open Dashboard Workspace' : 'Web App Dashboard'}
-            <ArrowRight size={16} />
-          </motion.button>
+            <span style={{ color: '#94a3b8' }}>CLI Command:</span>
+            <code style={{ color: '#10b981', fontWeight: 700 }}>tunefetch TF-XXXX</code>
+          </motion.div>
         </motion.div>
 
         {/* Connected indicator */}

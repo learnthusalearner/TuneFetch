@@ -415,24 +415,23 @@ export default function DashboardPage({ onGoHome }) {
             </div>
           </div>
 
-          <a
-            href={api.getInstallerDownloadUrl()}
-            download="TuneFetch_Setup.exe"
-            className="btn-download-action"
-            style={{
-              padding: '9px 18px',
-              fontSize: '12.5px',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '7px',
-              whiteSpace: 'nowrap',
-              textDecoration: 'none'
-            }}
-          >
-            <FolderDown size={15} />
-            <span>Download Desktop Setup (.exe)</span>
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1-Time Setup:</span>
+            <code
+              style={{
+                fontSize: '12.5px',
+                color: '#10b981',
+                fontWeight: 700,
+                background: 'rgba(0, 0, 0, 0.45)',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                letterSpacing: '0.4px'
+              }}
+            >
+              python install_cli.py
+            </code>
+          </div>
         </div>
 
         {/* ── WORKSPACE CONTENT ─────────────────────────────────── */}
