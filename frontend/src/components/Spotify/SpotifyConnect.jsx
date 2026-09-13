@@ -6,7 +6,7 @@ import { Music2, LogOut, CheckCircle2 } from 'lucide-react';
  * SpotifyConnect — redesigned hero connect card matching the landing page aesthetic.
  * Shows a rich glassmorphic card when not connected; a compact connected status bar when linked.
  */
-export default function SpotifyConnect({ spotifyStatus, onConnect, onDisconnect, isLoading }) {
+export default function SpotifyConnect({ spotifyStatus, onConnect, onDisconnect, isLoading, isConnecting }) {
   const isConnected = spotifyStatus?.connected;
   const user = spotifyStatus?.spotify_user;
 
@@ -130,13 +130,32 @@ export default function SpotifyConnect({ spotifyStatus, onConnect, onDisconnect,
         id="spotify-connect-btn"
         className="btn-primary-green"
         onClick={onConnect}
-        disabled={isLoading}
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.97 }}
-        style={{ fontSize: '15px', padding: '15px 36px', marginTop: 4 }}
+        disabled={isLoading || isConnecting}
+        whileHover={!isConnecting ? { scale: 1.04 } : {}}
+        whileTap={!isConnecting ? { scale: 0.97 } : {}}
+        style={{ fontSize: '15px', padding: '15px 36px', marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: '10px' }}
       >
-        <Music2 size={20} />
-        Connect with Spotify
+        {isConnecting ? (
+          <>
+            <motion.div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                border: '2px solid #000',
+                borderTopColor: 'transparent',
+              }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+            />
+            <span>Redirecting to Spotify...</span>
+          </>
+        ) : (
+          <>
+            <Music2 size={20} />
+            <span>Connect with Spotify</span>
+          </>
+        )}
       </motion.button>
       <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '-8px' }}>
         Log into any Spotify Free or Premium account · Switch accounts anytime

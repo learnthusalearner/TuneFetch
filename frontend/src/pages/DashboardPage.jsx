@@ -13,6 +13,7 @@ import SpotifyPlaylists from '../components/Spotify/SpotifyPlaylists';
 import PlaylistTracksModal from '../components/Spotify/PlaylistTracksModal';
 import BatchProgressCard from '../components/Spotify/BatchProgressCard';
 import ProgressCard from '../components/ProgressCard';
+import SpotifyOAuthLoader from '../components/Spotify/SpotifyOAuthLoader';
 
 import { api, setStoredUserId } from '../services/api';
 import { useDownloadTask } from '../hooks/useDownloadTask';
@@ -34,6 +35,8 @@ export default function DashboardPage({ onGoHome }) {
 
   /* ── Spotify state ─────────────────────────────────────────── */
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isConnectingSpotify, setIsConnectingSpotify] = useState(false);
+  const [isConfirmingOAuth, setIsConfirmingOAuth] = useState(false);
   const [spotifyStatus, setSpotifyStatus] = useState({ connected: false, spotify_user: null });
   const [spotifyPlaylists, setSpotifyPlaylists] = useState([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
@@ -114,7 +117,8 @@ export default function DashboardPage({ onGoHome }) {
         setStoredUserId(urlUserId);
       }
       if (params.get('spotify') === 'connected') {
-        pushToast('Spotify account connected successfully!', 'success');
+        setIsConfirmingOAuth(true);
+        pushToast('Spotify account connected! Loading playlists...', 'success');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (params.get('spotify_error')) {
         let rawErr = params.get('spotify_error') || '';
@@ -150,7 +154,7 @@ export default function DashboardPage({ onGoHome }) {
       const status = await api.getSpotifyStatus();
       setSpotifyStatus(status);
       if (status.connected) {
-        fetchPlaylists();
+        await fetchPlaylists();
         try {
           const latestJob = await api.getLatestPlaylistJob();
           if (latestJob && ['COMPLETED', 'PROCESSING', 'QUEUED'].includes(latestJob.status)) {
@@ -162,6 +166,8 @@ export default function DashboardPage({ onGoHome }) {
     } catch {
     } finally {
       setIsCheckingAuth(false);
+      setIsConfirmingOAuth(false);
+      setIsConnectingSpotify(false);
     }
   };
 
@@ -219,7 +225,10 @@ export default function DashboardPage({ onGoHome }) {
   }, [activeJobId, pushToast]);
 
   /* ── Event handlers ────────────────────────────────────────── */
-  const handleSpotifyConnect = () => { window.location.href = api.getSpotifyAuthUrl(); };
+  const handleSpotifyConnect = () => {
+    setIsConnectingSpotify(true);
+    window.location.href = api.getSpotifyAuthUrl();
+  };
 
   const handleSpotifyDisconnect = async () => {
     try {
@@ -388,29 +397,19 @@ export default function DashboardPage({ onGoHome }) {
 
         {/* ── WORKSPACE CONTENT ─────────────────────────────────── */}
         <motion.div key="spotify" {...pageVariants} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {isCheckingAuth ? (
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '60px 24px',
-                  gap: 16,
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  borderRadius: 16,
-                  border: '1px solid rgba(255, 255, 255, 0.06)'
-                }}>
-                  <RefreshCw size={26} className="spinner" style={{ color: 'var(--accent-green)' }} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Checking Spotify authorization...
-                  </span>
-                </div>
+              {isConfirmingOAuth || isCheckingAuth ? (
+                <SpotifyOAuthLoader
+                  title={isConfirmingOAuth ? "Connecting Your Spotify Account..." : "Securing Spotify Session..."}
+                  subtitle={isConfirmingOAuth ? "Exchanging encrypted PKCE tokens & retrieving your playlist library..." : "Securing authentication handshake with local backend..."}
+                  stage={isConfirmingOAuth ? 3 : 2}
+                />
               ) : !spotifyStatus.connected ? (
                 <SpotifyConnect
                   spotifyStatus={spotifyStatus}
                   onConnect={handleSpotifyConnect}
                   onDisconnect={handleSpotifyDisconnect}
                   isLoading={isLoadingPlaylists}
+                  isConnecting={isConnectingSpotify}
                 />
               ) : (
                 <>
