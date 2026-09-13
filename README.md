@@ -2,8 +2,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Audio-320_kbps_MP3-1DB954?style=for-the-badge&logo=spotify&logoColor=white" alt="320 kbps" />
-  <img src="https://img.shields.io/badge/Setup-1--Command_CLI-0078D7?style=for-the-badge&logo=windows-terminal&logoColor=white" alt="1-Command CLI" />
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Security-OAuth_2.0_PKCE-10b981?style=for-the-badge&logo=auth0&logoColor=white" alt="PKCE OAuth" />
+  <img src="https://img.shields.io/badge/CLI-One--Line_Engine-0078D7?style=for-the-badge&logo=windows-terminal&logoColor=white" alt="One-Line CLI" />
   <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React-19+-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License" />
@@ -11,53 +11,73 @@
 
 ---
 
-## 📖 What is TuneFetch?
+## ⚡ What is TuneFetch?
 
-**TuneFetch** is the fastest and easiest way to download your Spotify playlists directly onto your computer in pristine **320 kbps MP3** format with high-resolution album artwork embedded — completely free, zero ads, and without needing browser extensions.
+**TuneFetch** is a modern, high-fidelity Spotify playlist downloader. It combines the comfort of a sleek web dashboard with the multi-threaded power of your local machine.
 
-> 🌐 **Live Web App:** [tune-fetch-tan.vercel.app](https://tune-fetch-tan.vercel.app)
-
-Choose your setup path:
-- 🚀 **[Path A: CLI Quickstart (60 Seconds)](#-path-a-cli-quickstart-ready-in-60-seconds)** — Download music right now using the live web app and the global CLI.
-- 🛠️ **[Path B: Self-Hosting & Local Development](#-path-b-self-hosting--local-development-guide)** — Run your own backend + frontend locally with `.env`.
+- 🎵 **Studio-Quality Audio**: High-speed conversion to pristine **320 kbps Constant Bitrate (CBR) MP3**.
+- 🖼️ **Full Artwork & Metadata**: Embeds high-resolution album covers, track titles, artists, and album tags automatically.
+- 🛡️ **Zero Tracking, Zero Ads**: 100% private. Authenticates directly with Spotify via **PKCE OAuth 2.0**.
+- 🚀 **No Browser Bottlenecks**: Avoids browser tab crashes and download size limits by handing batch conversions over to a lightweight native CLI engine (`tunefetch TF-XXXX`).
+- 🐘 **Zero-Config Database**: Runs out-of-the-box with auto-created SQLite (`tunefetch_dev.db`) or high-concurrency cloud PostgreSQL (Neon).
 
 ---
 
-## ⚡ Path A: CLI Quickstart (Ready in 60 Seconds)
+## 🚀 Quick Navigation
 
-If you just want to download playlists using the official live cloud service:
+1. [⚡ 60-Second Quickstart (CLI Only)](#-60-second-quickstart-cli-only)
+2. [🛠️ Complete Setup Guide (Clone & Run Locally)](#️-complete-setup-guide-clone--run-locally)
+   - [Step 1: Clone the Repository](#step-1-clone-the-repository)
+   - [Step 2: Environment Configuration (`.env`)](#step-2-environment-configuration-env)
+   - [Step 3: Start the Backend API](#step-3-start-the-backend-api)
+   - [Step 4: Start the Frontend UI](#step-4-start-the-frontend-ui)
+   - [Step 5: Install the Global CLI](#step-5-install-the-global-cli)
+3. [🔄 How the Full System Works (End-to-End Architecture)](#-how-the-full-system-works-end-to-end-architecture)
+4. [🖥️ Live Terminal Downloader Experience](#️-live-terminal-downloader-experience)
+5. [📁 File Organization & Metadata](#-file-organization--metadata)
+6. [💡 CLI Commands & Options](#-cli-commands--options)
+7. [📂 Project Structure](#-project-structure)
+8. [❓ Troubleshooting & Common Solutions](#-troubleshooting--common-solutions)
 
-### 1. Clone & Install
+---
+
+## ⚡ 60-Second Quickstart (CLI Only)
+
+If you already have a 4-digit session code (e.g. `TF-8429`) from the TuneFetch dashboard:
+
 ```bash
+# 1. Clone the repository
 git clone https://github.com/learnthusalearner/TuneFetch.git
 cd TuneFetch
+
+# 2. Register the global CLI command (Windows, macOS, or Linux)
 python install_cli.py
+
+# 3. Download your playlist in pristine 320 kbps MP3
+tunefetch TF-8429
 ```
-*(On Windows, macOS, or Linux, this automatically installs dependencies and registers `tunefetch` globally in your PATH).*
 
-### 2. Get Your Code & Download!
-1. Open [tune-fetch-tan.vercel.app](https://tune-fetch-tan.vercel.app).
-2. Connect your Spotify account and click **"Download on My PC"** on any playlist to get your session code (e.g. `TF-4847`).
-3. Open **ANY terminal window** and run:
-   ```bash
-   tunefetch TF-4847
-   ```
-4. All songs are saved directly into `Downloads/Thanks for downloading/<Playlist Name>/` in 320 kbps MP3 format with album covers and ID3 metadata!
+All tracks will be transcoded and saved directly into your system `Downloads/Thanks for downloading/<Playlist Name>/` directory.
 
 ---
 
-## 🛠️ Path B: Self-Hosting & Local Development Guide
+## 🛠️ Complete Setup Guide (Clone & Run Locally)
 
-Want to run the complete stack locally (FastAPI backend + React frontend) on your own machine? You can clone this repository, configure `.env`, and have everything running in minutes.
+Follow these clear, step-by-step instructions to run the entire stack (FastAPI Backend + React Frontend + CLI Engine) on your local machine.
 
-### 1. Prerequisites
-- **Python**: 3.10+ (make sure Python is added to your system `PATH`)
-- **Node.js**: 18+ and `npm`
-- **Git**
+### Prerequisites
+
+Ensure you have the following installed:
+- **Python**: `3.10` or newer ([Download Python](https://www.python.org/downloads/)) — *Make sure "Add Python to PATH" is checked during installation.*
+- **Node.js**: `18.0` or newer with `npm` ([Download Node.js](https://nodejs.org/))
+- **Git**: ([Download Git](https://git-scm.com/))
 
 ---
 
-### 2. Clone the Repository
+### Step 1: Clone the Repository
+
+Open your terminal or command prompt:
+
 ```bash
 git clone https://github.com/learnthusalearner/TuneFetch.git
 cd TuneFetch
@@ -65,223 +85,160 @@ cd TuneFetch
 
 ---
 
-### 3. Configure Environment Variables (`.env`)
+### Step 2: Environment Configuration (`.env`)
 
-Copy the provided example file to `.env`:
-```bash
-cp .env.example .env
-```
-*(TuneFetch automatically supports loading `.env` from either the repository root or the `backend/` directory).*
+TuneFetch requires only two API keys to run with full functionality: **Spotify Developer** and **Serper API**.
 
-Open `.env` in your code editor and configure your credentials:
+1. Copy the example environment template to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+   *(On Windows Command Prompt, run: `copy .env.example .env`)*
 
-```ini
-# ============================================================
-# TuneFetch Environment Configuration
-# ============================================================
+2. Open `.env` in any text editor:
+   ```ini
+   # ============================================================
+   # TuneFetch Environment Configuration
+   # ============================================================
 
-# Database Configuration
-# Leave commented out to use zero-setup local SQLite (tunefetch_dev.db):
-# DATABASE_URL=postgresql://user:password@your-neon-host.neon.tech/neondb?sslmode=require
+   # 1. Database (Optional)
+   # Leave blank or commented out to use zero-setup local SQLite (tunefetch_dev.db)
+   # DATABASE_URL=postgresql://user:password@your-neon-host.neon.tech/neondb?sslmode=require
 
-# Spotify Developer Credentials (REQUIRED)
-# 1. Go to https://developer.spotify.com/dashboard
-# 2. Create an App
-# 3. Add Redirect URI: http://127.0.0.1:8000/spotify/callback
-SPOTIFY_CLIENT_ID=your_spotify_client_id_here
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
-SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/spotify/callback
+   # 2. Spotify Developer Credentials (REQUIRED)
+   # Dashboard: https://developer.spotify.com/dashboard
+   # Crucial: Add Redirect URI: http://127.0.0.1:8000/spotify/callback
+   SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+   SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+   SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/spotify/callback
 
-# Serper Search API Key (REQUIRED for YouTube audio stream resolution)
-# Get 2,500 free queries on sign-up: https://serper.dev
-SERPER_API_KEY=your_serper_api_key_here
+   # 3. Serper Search API Key (REQUIRED for audio stream discovery)
+   # Free 2,500 queries upon signup: https://serper.dev
+   SERPER_API_KEY=your_serper_api_key_here
 
-# Security & Frontend URL
-SESSION_SECRET_KEY=change_this_to_a_secure_random_string_at_least_32_chars
-FRONTEND_URL=http://localhost:5173
-```
+   # 4. App Security & Frontend Origin
+   SESSION_SECRET_KEY=change_this_to_a_secure_random_string_at_least_32_chars
+   FRONTEND_URL=http://localhost:5173
+   ```
 
-#### 🔑 Where to get each key:
-| Variable | Required? | Description |
+#### 🔑 Where to get your keys (Takes 2 minutes):
+
+| Service | Free Tier | Setup Steps |
 | :--- | :---: | :--- |
-| `SPOTIFY_CLIENT_ID`<br/>`SPOTIFY_CLIENT_SECRET` | **YES** | From [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). **Crucial**: in your Spotify app settings, add `http://127.0.0.1:8000/spotify/callback` to the **Redirect URIs**. |
-| `SERPER_API_KEY` | **YES** | From [serper.dev](https://serper.dev) (free 2,500 queries upon signup). Used to accurately match track metadata to audio streams. |
-| `DATABASE_URL` | *Optional* | If left commented out, TuneFetch will **automatically use a local SQLite database** (`tunefetch_dev.db`) with zero setup needed! For production, provide a Neon or PostgreSQL connection string. |
-| `SESSION_SECRET_KEY` | *Optional* | Any secure random string (minimum 32 characters) used to cryptographically sign session cookies. |
-| `FRONTEND_URL` | *Optional* | Defaults to `http://localhost:5173` for local development. |
+| **Spotify Developer** | Free | 1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in.<br/>2. Click **Create App**.<br/>3. In App Settings, add Redirect URI: **`http://127.0.0.1:8000/spotify/callback`** and save.<br/>4. Copy **Client ID** and **Client Secret** into your `.env`. |
+| **Serper API** | 2,500 Free Searches | 1. Go to [serper.dev](https://serper.dev) and sign up with Google or GitHub.<br/>2. Copy your **API Key** from the dashboard and paste it into `SERPER_API_KEY`. |
+| **Database** | Built-in SQLite | **Zero setup required!** By default, TuneFetch automatically initializes a local SQLite database (`tunefetch_dev.db`) on startup. |
 
 ---
 
-### 4. Install Dependencies
+### Step 3: Start the Backend API
 
-#### Python Backend:
-```bash
-pip install -r requirements.txt
-```
-*(Or run `python install_cli.py` to also register the `tunefetch` CLI command globally).*
+1. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-#### React Frontend:
+2. Start the FastAPI server:
+   ```bash
+   python run.py
+   ```
+
+The backend server is now running:
+- **API Server**: `http://127.0.0.1:8000`
+- **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
+
+---
+
+### Step 4: Start the Frontend UI
+
+Open a **second terminal window** and run:
+
 ```bash
+# Navigate to frontend folder
 cd frontend
+
+# Install dependencies
 npm install
-cd ..
-```
 
----
-
-### 5. Run the Local Stack
-
-Run the backend and frontend in two separate terminals:
-
-#### Terminal 1 — Backend (FastAPI):
-```bash
-python run.py
-```
-- API will start on: **`http://127.0.0.1:8000`**
-- Interactive Swagger documentation: **`http://127.0.0.1:8000/docs`**
-
-#### Terminal 2 — Frontend (React + Vite):
-```bash
-cd frontend
+# Start the development server
 npm run dev
 ```
-- Web UI will start on: **`http://localhost:5173`**
 
-Open **`http://localhost:5173`** in your browser, connect Spotify, select any playlist, and enjoy!
-
----
+Open your browser and visit: **`http://localhost:5173`**
 
 ---
 
-## 🔄 Complete End-to-End Flow (When Someone Clones This Repo)
+### Step 5: Install the Global CLI
 
-Here is exactly what happens under the hood when a developer or user clones TuneFetch, sets up their `.env`, and downloads a playlist:
+In either terminal, run:
+
+```bash
+python install_cli.py
+```
+
+This single command:
+1. Installs all required audio transcoding packages (`imageio-ffmpeg`, `mutagen`, `requests`, `yt-dlp`).
+2. Registers `tunefetch` globally in your system's PATH.
+3. Allows you to open **any** terminal and run `tunefetch TF-XXXX`.
+
+---
+
+## 🔄 How the Full System Works (End-to-End Architecture)
+
+Here is a visual breakdown of the architecture when you download a playlist:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer / User
-    participant Browser as React Web UI (5173)
-    participant Backend as FastAPI Backend (8000)
+    actor User as User / Developer
+    participant Web as React Web UI (:5173)
+    participant API as FastAPI Backend (:8000)
     participant Spotify as Spotify Accounts API
     participant DB as SQLite / Neon PostgreSQL
     participant Serper as Google Serper API
-    participant CLI as TuneFetch CLI Engine
+    participant Engine as Native CLI Engine (tunefetch)
     participant Disk as Local Downloads Folder
 
-    Note over Dev, Backend: Phase 1: Local Setup & Service Boot
-    Dev->>Backend: 1. Clone repo, create .env, and run python run.py
-    Backend->>DB: 2. Auto-initialize tables (SQLite tunefetch_dev.db or Neon)
-    Dev->>Browser: 3. Start React UI via npm run dev (http://localhost:5173)
+    Note over User, Web: Phase 1: Authentication & Selection
+    User->>Web: 1. Clicks "Launch Web App Dashboard"
+    Web->>API: 2. GET /spotify/auth (PKCE SHA-256 challenge generated)
+    API->>Spotify: 3. User logs in & grants playlist read access
+    Spotify->>API: 4. Redirects to /spotify/callback with auth code
+    API->>Spotify: 5. Exchanges code for encrypted access & refresh tokens
+    API->>DB: 6. Stores encrypted tokens & sets HTTP-only session cookie
+    Web->>API: 7. GET /spotify/playlists (Sliding-window pagination, up to 1,400+ tracks)
+    API-->>Web: 8. Returns playlists with track metadata and album art
 
-    Note over Browser, Spotify: Phase 2: Spotify PKCE OAuth Authentication
-    Dev->>Browser: 4. Clicks "Connect Spotify"
-    Browser->>Backend: 5. GET /spotify/auth
-    Backend->>Browser: 6. Returns Spotify Auth URL (with PKCE S256 Challenge & signed state)
-    Browser->>Spotify: 7. User logs in & authorizes scopes
-    Spotify->>Backend: 8. Redirects to /spotify/callback?code=...
-    Backend->>Spotify: 9. Exchanges authorization code + PKCE verifier for tokens
-    Backend->>DB: 10. Fernet-encrypts and stores tokens safely at rest
-    Backend->>Browser: 11. Sets HTTP-only signed session cookie & redirects back
+    Note over Web, Engine: Phase 2: Session Key Generation
+    User->>Web: 9. Clicks "Download on My PC" on chosen playlist
+    Web->>API: 10. POST /spotify/playlist/session
+    API-->>Web: 11. Returns 4-digit session code (e.g. TF-8429)
 
-    Note over Browser, Backend: Phase 3: Playlist Pagination & Session Creation
-    Browser->>Backend: 12. GET /spotify/playlists
-    Backend->>Spotify: 13. Fetches playlists via sliding-window cursor pagination (supports 1,400+ tracks)
-    Backend-->>Browser: 14. Displays playlists with track counts & cover art
-    Dev->>Browser: 15. Selects playlist and clicks "Download on My PC"
-    Browser->>Backend: 16. POST /spotify/playlist/session
-    Backend-->>Browser: 17. Returns unique 4-digit code (e.g. TF-4847)
-
-    Note over CLI, Disk: Phase 4: High-Fidelity Audio Extraction Pipeline
-    Dev->>CLI: 18. Runs: tunefetch TF-4847 in ANY terminal
-    CLI->>Backend: 19. Resolves TF-4847 from localhost:8000 (or cloud fallback)
-    Backend-->>CLI: 20. Returns playlist tracklist metadata
-    loop For Every Track in Playlist
-        CLI->>DB: 21. Check resolved_songs cache for (Song Name + Artist)
+    Note over Engine, Disk: Phase 3: High-Fidelity Audio Conversion
+    User->>Engine: 12. Runs: tunefetch TF-8429 in any terminal
+    Engine->>API: 13. Resolves playlist tracks from local backend (or cloud fallback)
+    API-->>Engine: 14. Returns full track list metadata
+    loop For Every Song in Playlist
+        Engine->>DB: 15. Check resolved_songs cache for (Title + Artist)
         alt Cache Hit (< 5ms)
-            DB-->>CLI: 22a. Reuses cached YouTube stream URL instantly
+            DB-->>Engine: 16a. Reuses cached stream URL instantly
         else Cache Miss
-            CLI->>Serper: 22b. Queries: site:youtube.com/watch "Song" "Artist"
-            Serper-->>CLI: 23b. Returns top verified YouTube candidate URL
-            CLI->>DB: 24b. Caches resolved stream into DB for future reuse
+            Engine->>Serper: 16b. Queries: site:youtube.com/watch "Song" "Artist"
+            Serper-->>Engine: 17b. Returns verified YouTube audio candidate
+            Engine->>DB: 18b. Caches stream into DB for future instant downloads
         end
-        CLI->>CLI: 25. Downloads high-bitrate audio stream in parallel with live progress
-        CLI->>CLI: 26. Transcodes to 320 kbps CBR MP3 via embedded imageio-ffmpeg
-        CLI->>CLI: 27. Injects Spotify ID3 tags & embeds high-res cover art
-        CLI->>Disk: 28. Saves to Downloads/Thanks for downloading/<Playlist>/
+        Engine->>Engine: 19. Streams audio & converts to 320 kbps CBR MP3 via embedded FFmpeg
+        Engine->>Engine: 20. Injects Spotify ID3 tags & embeds high-res album artwork
+        Engine->>Disk: 21. Writes to Downloads/Thanks for downloading/<Playlist Name>/
     end
-    CLI-->>Dev: 29. [✓] All tracks saved and ready to play!
+    Engine-->>User: 22. [✓] All tracks converted and ready to play!
 ```
 
 ---
 
-### 🧩 Detailed Breakdown of Each Step
+## 🖥️ Live Terminal Downloader Experience
 
-#### 1. Setup & Multi-Env Auto-Detection
-- When you clone the repository and run `cp .env.example .env`, the configuration system in [`config.py`](file:///c:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/app/core/config.py) automatically checks for `.env` at the **repository root** and inside `backend/`.
-- If you leave `DATABASE_URL` commented out, SQLAlchemy automatically creates a local SQLite file (`tunefetch_dev.db`) on first run — **meaning zero database setup is needed to start developing**.
-
-#### 2. Spotify OAuth 2.0 with PKCE Security
-- No Spotify passwords or permanent raw secrets are ever exposed to the frontend.
-- TuneFetch implements **Proof Key for Code Exchange (PKCE)** using high-entropy 64-byte random verifiers and SHA-256 challenges.
-- Tokens received from Spotify are **Fernet-encrypted at rest** before touching PostgreSQL or SQLite.
-- Session identity is secured via cryptographically signed HTTP-only cookies (`tunefetch_session`).
-
-#### 3. Large Playlist Pagination Engine
-- Standard Spotify API calls cap at 50 or 100 tracks.
-- TuneFetch features an asynchronous sliding-window cursor pagination loop in [`spotify_service.py`](file:///c:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/app/services/spotify_service.py) that seamlessly traverses and normalizes playlists with **10, 100, 500, or 1,400+ tracks** without memory leaks or request timeouts.
-
-#### 4. The Session Code Bridge (`TF-XXXX`)
-- Downloading 500 high-bitrate MP3s through a browser tab can freeze the browser, trigger memory limits, or fail on background tab throttling.
-- Instead, clicking **"Download on My PC"** creates a lightweight temporary session code (e.g. `TF-4847`) that packages the playlist's metadata.
-- This acts as an instantaneous bridge between the web dashboard and your native operating system terminal.
-
-#### 5. Song Resolution & Persistent Database Cache
-- When the CLI runs, it checks whether the song and artist pair has already been discovered in the `resolved_songs` table:
-  - **Cache Hit**: Resolves in **`< 5ms`**, bypassing external search completely.
-  - **Cache Miss**: Constructs an exact Google search query via the Serper API (`site:youtube.com/watch "Song Name" "Artist Name"`), extracts the best audio stream, and saves it into the database so anyone downloading that track in the future gets it instantly.
-
-#### 6. Audio Transcoding & High-Fidelity Tagging
-- **Zero FFmpeg Setup**: Audio transcoding uses `imageio-ffmpeg` to embed the necessary conversion binaries directly — users don't have to manually download, extract, or add `ffmpeg.exe` to their system PATH.
-- Streams are transcoded into **pristine 320 kbps Constant Bitrate (CBR) MP3**.
-- High-resolution album artwork from Spotify is downloaded and embedded directly into the MP3's ID3 metadata tags (APIC frame) along with Title, Artist, Album, and Track number.
-- Files are saved directly to `Downloads/Thanks for downloading/<Playlist Name>/` — no ZIP extraction necessary.
-
-
----
-
-## 📁 Where Are Downloaded Songs Saved?
-
-All tracks are automatically organized into your standard system Downloads folder:
-
-```
-Downloads/
-└── Thanks for downloading/
-    └── <Playlist_Name>/
-        ├── 01 - Artist - Song Title.mp3
-        ├── 02 - Artist - Another Song.mp3
-        └── ...
-```
-
-- 💎 **320 kbps CBR MP3** maximum audio fidelity.
-- 🖼️ **Embedded Album Artwork** on every single track.
-- 🏷️ **Proper ID3 Metadata** (Artist, Title, Album, Track Number).
-- 📂 **No ZIP extraction required**: Ready to play immediately in VLC, Apple Music, Windows Media Player, or car stereos.
-
----
-
-## 💡 CLI Commands & Options
-
-You can run `tunefetch` from any folder or terminal:
-
-| Command | Description |
-| :--- | :--- |
-| `tunefetch TF-XXXX` | Download tracks for a specific session code |
-| `tunefetch` | Interactive prompt — paste code when prompted |
-| `tunefetch --help` | Show usage options and current download folder |
-| `python download.py TF-XXXX` | Direct script execution fallback |
-
-### 🖥️ Live Terminal Downloader Preview
+When you run `tunefetch TF-8429`, the engine displays live Unicode progress indicators, real-time download speeds, and completion metrics:
 
 ```text
 $ tunefetch TF-8429
@@ -298,9 +255,9 @@ $ tunefetch TF-8429
  [+] [1/24] Petit Biscuit - Sunset Lover              [✓ COMPLETED]
      ↳ 320 kbps CBR MP3 · 8.4 MB · Album Art Embedded · Saved
  [+] [2/24] M83 - Midnight City                       [✓ COMPLETED]
-     ↳ 320 kbps CBR MP3 · 9.1 MB · Album Art Embedded · Saved
- [↓] [3/24] The Weeknd - Blinding Lights   92% |  9.4 MB/s | ETA: 00:01
-     [██████████████████████████████░░░░] 92%
+     ↳ 320 kbps CBR MP3 · 9.8 MB · Album Art Embedded · Saved
+ [↓] [3/24] The Weeknd - Starboy           92% | 11.2 MB/s | ETA: 00:01
+     [██████████████████████████████████░░] 92%
 
  ╭────────────────────────────────────────────────────────────╮
  │  ✓ All 24 of 24 tracks converted successfully at 320 kbps! │
@@ -309,18 +266,40 @@ $ tunefetch TF-8429
  ╰────────────────────────────────────────────────────────────╯
 ```
 
+---
+
+## 📁 File Organization & Metadata
+
+All downloaded songs are automatically organized in your system's default `Downloads` folder:
+
+```
+Downloads/
+└── Thanks for downloading/
+    └── <Playlist_Name>/
+        ├── 01 - Petit Biscuit - Sunset Lover.mp3
+        ├── 02 - M83 - Midnight City.mp3
+        ├── 03 - The Weeknd - Starboy.mp3
+        └── ...
+```
+
+### Every track includes:
+- **Max Bitrate**: 320 kbps Constant Bitrate (CBR) stereo audio.
+- **Embedded Cover Art**: High-resolution Spotify artwork injected into the MP3's APIC frame.
+- **ID3 Metadata**: Title, Artist, Album, and Track Number.
+- **Ready to Play**: Drag and drop into Apple Music, VLC, Rekordbox, USB drives, or offline media players with zero extraction needed.
 
 ---
 
-## ✨ Key Features
+## 💡 CLI Commands & Options
 
-- 🟢 **Spotify OAuth 2.0 with PKCE**: Inspect and download your own private, collaborative, and public Spotify playlists with 100% privacy.
-- ⚡ **1-Command Setup**: `python install_cli.py` handles dependencies and PATH setup globally.
-- 📊 **Real-Time Visual Download Reporting**: Live progress bars (`[████████░░] 78%`), speeds in `MB/s`, and dynamic ETA calculation.
-- 🐘 **Zero-Config Database or Cloud Neon**: Works out-of-the-box with local SQLite (`tunefetch_dev.db`) or high-concurrency Neon PostgreSQL with song caching.
-- 📜 **Large Playlist Pagination**: Handles playlists containing **10, 100, 500, or 1,400+ tracks** without freezing or dropping songs.
-- 🛠️ **Embedded Audio Conversion**: Uses `imageio-ffmpeg` to ensure zero-configuration MP3 conversion without manual FFmpeg installation.
-- 🛡️ **Zero Tracking & No Adware**: 100% open-source, inspectable Python engine.
+You can run `tunefetch` from any command prompt, PowerShell, or terminal:
+
+| Command | Action |
+| :--- | :--- |
+| `tunefetch TF-XXXX` | Download tracks for a specific session code |
+| `tunefetch` | Interactive mode — prompts you to enter your session code |
+| `tunefetch --help` | Show usage options, version, and download folder path |
+| `python download.py TF-XXXX` | Direct script execution (alternative if PATH is not updated) |
 
 ---
 
@@ -328,46 +307,45 @@ $ tunefetch TF-8429
 
 ```
 TuneFetch/
-├── .env.example                          # Environment variable template
-├── download.py                           # CLI downloader entrypoint
-├── install_cli.py                        # 1-Command installer & PATH setup
+├── .env.example                          # Environment variable configuration template
+├── download.py                           # CLI downloader root entrypoint
+├── install_cli.py                        # 1-Command CLI installer and PATH setup
 ├── requirements.txt                      # Root Python dependencies
-├── run.py                                # Root backend launcher
+├── run.py                                # Root backend launcher script
 ├── backend/
-│   ├── .env.example                      # Backend-specific env template
-│   ├── launcher.py                       # CLI downloader core engine
-│   ├── requirements.txt                  # Backend dependencies
-│   ├── run.py                            # Backend server launcher
+│   ├── .env.example                      # Backend-specific template
+│   ├── launcher.py                       # CLI downloader core execution engine
+│   ├── requirements.txt                  # FastAPI and audio conversion packages
+│   ├── run.py                            # Backend server runner
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── config.py                 # Settings & env loader (root & backend)
-│   │   │   ├── database.py               # SQLAlchemy (PostgreSQL / SQLite)
-│   │   │   └── rate_limiter.py           # In-memory sliding-window rate limiter
+│   │   │   ├── config.py                 # Multi-directory .env auto-loader
+│   │   │   ├── database.py               # SQLAlchemy database engine (SQLite / Neon)
+│   │   │   └── rate_limiter.py           # In-memory sliding-window request limiter
 │   │   ├── models/
-│   │   │   ├── db_models.py              # User, SpotifyAccount, ResolvedSong
-│   │   │   └── schemas.py                # Pydantic schemas
+│   │   │   ├── db_models.py              # User, SpotifyAccount, ResolvedSong models
+│   │   │   └── schemas.py                # Pydantic request and response schemas
 │   │   ├── routes/
-│   │   │   ├── health.py                 # Health check
-│   │   │   ├── media.py                  # Audio stream & download jobs
+│   │   │   ├── health.py                 # System health and ping check
+│   │   │   ├── media.py                  # Direct audio stream proxy endpoints
 │   │   │   ├── spotify.py                # Spotify OAuth, playlists & sessions
 │   │   │   └── cloud_session.py          # Session code resolution API
 │   │   ├── services/
-│   │   │   ├── downloader.py             # Audio extraction engine
-│   │   │   ├── local_batch_downloader.py # Batch CLI downloader with progress
-│   │   │   ├── spotify_service.py        # PKCE OAuth & 1,400+ track pagination
-│   │   │   └── serper_service.py         # Serper search & stream cache
+│   │   │   ├── downloader.py             # Audio conversion and stream pipeline
+│   │   │   ├── local_batch_downloader.py # Multi-threaded terminal progress engine
+│   │   │   ├── spotify_service.py        # PKCE OAuth & sliding-window pagination
+│   │   │   └── serper_service.py         # Serper Google Search & stream cache
 │   │   └── utils/
-│   │       ├── auth_helper.py            # Token encryption & session cookies
+│   │       ├── auth_helper.py            # Fernet token encryption & session cookies
 │   │       └── ffmpeg_helper.py          # Embedded FFmpeg binary locator
-│   └── tests/                            # Automated test suite
+│   └── tests/                            # Automated pytest test suite
 │
 ├── frontend/
-│   ├── .env.example                      # Frontend environment template
-│   ├── package.json                      # React & Vite dependencies
-│   ├── vite.config.js                    # Vite config with API proxy
+│   ├── package.json                      # React, Vite, and Lucide dependencies
+│   ├── vite.config.js                    # Vite configuration with API proxy
 │   └── src/
-│       ├── components/                   # UI components (Spotify, Terminal, etc.)
-│       ├── pages/                        # Landing & Dashboard pages
+│       ├── components/                   # UI components (Hero, Terminal, Spotify, etc.)
+│       ├── pages/                        # Dashboard and Landing pages
 │       └── services/api.js               # Frontend API client
 └── README.md
 ```
@@ -376,37 +354,45 @@ TuneFetch/
 
 ## 🧪 Automated Testing
 
-Run the test suite with pytest:
+Verify your setup with the backend test suite:
+
 ```bash
+# Run all automated tests
 pytest backend/tests/test_spotify_pipeline.py backend/tests/test_rate_limiter.py -v
 ```
 
 ---
 
-## ❓ Troubleshooting & FAQs
+## ❓ Troubleshooting & Common Solutions
 
-### ❌ `tunefetch: command not found`
-- **Cause**: Terminal environment variables have not reloaded after running `install_cli.py`.
-- **Solution**: Open a **new** terminal window and run `tunefetch TF-XXXX`. Or run `python download.py TF-XXXX`.
+### 1. `tunefetch: command not found` (or not recognized)
+- **Cause**: The terminal has not reloaded system environment variables after running `python install_cli.py`.
+- **Solution**: Close and reopen your terminal or command prompt. Alternatively, you can always run:
+  ```bash
+  python download.py TF-XXXX
+  ```
 
-### ❌ Spotify Login Error: `INVALID_CLIENT: Invalid redirect URI`
-- **Cause**: The Redirect URI has not been added to your Spotify Developer App settings.
-- **Solution**: Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) -> Select your App -> Settings -> Add `http://127.0.0.1:8000/spotify/callback` to **Redirect URIs** and save.
+### 2. Spotify Login: `INVALID_CLIENT: Invalid redirect URI`
+- **Cause**: The redirect URI in your `.env` does not match the Spotify Developer Dashboard settings.
+- **Solution**:
+  1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard).
+  2. Click on your app and go to **Settings**.
+  3. Under **Redirect URIs**, ensure `http://127.0.0.1:8000/spotify/callback` is added and saved.
 
-### ❌ `ValueError: Serper API key is missing`
+### 3. `ValueError: Serper API key is missing`
 - **Cause**: `SERPER_API_KEY` is not set in `.env`.
-- **Solution**: Create a free account at [serper.dev](https://serper.dev) (takes 30 seconds), copy your API key, and paste it into `.env`.
+- **Solution**: Sign up at [serper.dev](https://serper.dev) for a free API key (2,500 free queries, no credit card required) and add it to your `.env`.
 
-### ❌ `Session code was not found or has expired`
-- **Cause**: Session codes expire after 24 hours.
-- **Solution**: Click **"Download on My PC"** again on the web app to generate a fresh 4-digit code.
+### 4. `Session code was not found or has expired`
+- **Cause**: Session keys expire after 24 hours for privacy and cache hygiene.
+- **Solution**: Go back to the web dashboard (`http://localhost:5173`) and click **"Download on My PC"** again to generate a fresh 4-digit code.
 
 ---
 
 ## 📄 License
 
-Distributed under the **MIT License**. Free for personal and educational use.
+TuneFetch is released under the **MIT License**. Free for personal and educational use.
 
 <p align="center">
-  <strong>Made with ❤️ • High-Fidelity Music Extraction Made Effortless</strong>
+  <strong>Crafted with ❤️ • Convert & Preserve Your Music in Studio Quality</strong>
 </p>
