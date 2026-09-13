@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  AlertCircle, RefreshCw, LogOut, DownloadCloud,
+  AlertCircle, RefreshCw, LogOut,
   CheckCircle2, FolderDown, Loader2
 } from 'lucide-react';
 
@@ -385,54 +385,6 @@ export default function DashboardPage({ onGoHome }) {
           )}
         </AnimatePresence>
 
-        {/* Local Desktop Batch Progress Card */}
-        {/* ─── QUICK TERMINAL APP DOWNLOAD / GUIDE BANNER ─────────── */}
-        <div
-          className="glass-panel"
-          style={{
-            padding: '16px 22px',
-            borderRadius: '14px',
-            background: 'linear-gradient(135deg, rgba(29, 185, 84, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
-            border: '1px solid rgba(29, 185, 84, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '14px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1DB954' }}>
-              <DownloadCloud size={22} />
-            </div>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>
-                TuneFetch Terminal Downloader
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Select any playlist below, click <strong>"Download on My PC"</strong> to get your session code, then run <code style={{ color: '#10b981' }}>tunefetch TF-XXXX</code>.
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1-Time Setup:</span>
-            <code
-              style={{
-                fontSize: '12.5px',
-                color: '#10b981',
-                fontWeight: 700,
-                background: 'rgba(0, 0, 0, 0.45)',
-                padding: '7px 14px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                letterSpacing: '0.4px'
-              }}
-            >
-              python install_cli.py
-            </code>
-          </div>
-        </div>
 
         {/* ── WORKSPACE CONTENT ─────────────────────────────────── */}
         <motion.div key="spotify" {...pageVariants} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
