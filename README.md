@@ -83,10 +83,9 @@ The system operates across two tightly integrated environments:
   - Real-time track stamp on completion: `[✓] [3/15] Song Title (Saved 320 kbps MP3)`
   - Accurate summary tallies: `[✓] Successfully processed 15 tracks (15 saved, 0 skipped)`
 - 📁 **Direct Local Folder Delivery**: Downloads directly to `Downloads/Thanks for downloading/{Playlist_Name}` with high-fidelity 320 kbps audio tags and embedded album art.
-- 📦 **Genuine 10-Second Windows Installer (`TuneFetch_Setup.exe`)**:
-  - Validates Terms & Privacy Policy acceptance before enabling installation.
-  - Authentic 10-second multi-stage installation progress bar simulating environment setup.
-  - Automatically creates Desktop shortcuts and registers `tunefetch` in PATH.
+- ⚡ **1-Command Automatic Setup (`python install_cli.py`)**:
+  - Automatically installs all dependencies and registers `tunefetch` in system PATH.
+  - Enables running `tunefetch TF-XXXX` from ANY command prompt or terminal window.
 - 🛡️ **In-Memory Sliding-Window Rate Limiter**:
   - Protects cloud APIs with 120 req/min (standard) and 30 req/min (heavy tasks).
   - Automatically returns HTTP 429 with `Retry-After` headers.
@@ -120,9 +119,9 @@ graph TD
         NeonDB[(Neon PostgreSQL: resolved_songs & jobs)]
     end
 
-    subgraph DesktopApp ["Local Desktop Engine (TuneFetch CLI / EXE)"]
-        Installer[TuneFetch_Setup.exe - 10s Installer Wizard]
-        Launcher[launcher.py / TuneFetch.exe CLI]
+    subgraph DesktopApp ["Local Global CLI Engine (tunefetch TF-XXXX)"]
+        SetupScript[install_cli.py / setup.py - 1-Command Setup]
+        Launcher[launcher.py / download.py CLI]
         LocalDownloader[services/local_batch_downloader.py]
         YTDLP[Downloader Engine & Embedded FFmpeg]
         LocalFolder[Downloads/Thanks for downloading/Playlist_Name/]
@@ -180,6 +179,9 @@ sequenceDiagram
 
 ```
 TuneFetch/
+├── download.py                           # Global CLI runner (tunefetch TF-XXXX)
+├── install_cli.py                        # 1-Command installer & PATH setup script
+├── setup.py                              # Alias for install_cli.py
 ├── backend/
 │   ├── app/
 │   │   ├── core/
@@ -206,13 +208,10 @@ TuneFetch/
 │   │   │   └── sanitizer.py              # Filename sanitization & Content-Disposition builder
 │   │   ├── main.py                       # FastAPI entrypoint with rate limiter & lifespan
 │   │   └── __init__.py
-│   ├── static/
-│   │   └── TuneFetch_Setup.exe           # Pre-built Windows installer served for direct download
 │   ├── tests/
 │   │   ├── test_spotify_pipeline.py      # Automated tests for Spotify PKCE & resolution
 │   │   └── test_rate_limiter.py          # Automated tests for API rate limiting & headers
-│   ├── launcher.py                       # Interactive CLI entrypoint with real-time progress bar
-│   ├── installer_wizard.py               # Modern Tkinter installer GUI with 10s progress & license check
+│   ├── launcher.py                       # Interactive CLI engine with real-time progress bar
 │   ├── requirements.txt                  # Python dependencies
 │   └── run.py                            # Backend server launcher with auto-venv detection
 │
