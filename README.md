@@ -151,25 +151,102 @@ Open **`http://localhost:5173`** in your browser, connect Spotify, select any pl
 
 ---
 
-## 🎵 How It Works (Step-by-Step)
+---
+
+## 🔄 Complete End-to-End Flow (When Someone Clones This Repo)
+
+Here is exactly what happens under the hood when a developer or user clones TuneFetch, sets up their `.env`, and downloads a playlist:
 
 ```mermaid
-graph LR
-    A[1. Open TuneFetch Web UI] --> B[2. Connect Spotify]
-    B --> C[3. Click 'Download on My PC']
-    C --> D[4. Copy Session Code TF-XXXX]
-    D --> E[5. Run: tunefetch TF-XXXX]
-    E --> F[6. Saved to Downloads Folder!]
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / User
+    participant Browser as React Web UI (5173)
+    participant Backend as FastAPI Backend (8000)
+    participant Spotify as Spotify Accounts API
+    participant DB as SQLite / Neon PostgreSQL
+    participant Serper as Google Serper API
+    participant CLI as TuneFetch CLI Engine
+    participant Disk as Local Downloads Folder
+
+    Note over Dev, Backend: Phase 1: Local Setup & Service Boot
+    Dev->>Backend: 1. Clone repo, create .env, and run python run.py
+    Backend->>DB: 2. Auto-initialize tables (SQLite tunefetch_dev.db or Neon)
+    Dev->>Browser: 3. Start React UI via npm run dev (http://localhost:5173)
+
+    Note over Browser, Spotify: Phase 2: Spotify PKCE OAuth Authentication
+    Dev->>Browser: 4. Clicks "Connect Spotify"
+    Browser->>Backend: 5. GET /spotify/auth
+    Backend->>Browser: 6. Returns Spotify Auth URL (with PKCE S256 Challenge & signed state)
+    Browser->>Spotify: 7. User logs in & authorizes scopes
+    Spotify->>Backend: 8. Redirects to /spotify/callback?code=...
+    Backend->>Spotify: 9. Exchanges authorization code + PKCE verifier for tokens
+    Backend->>DB: 10. Fernet-encrypts and stores tokens safely at rest
+    Backend->>Browser: 11. Sets HTTP-only signed session cookie & redirects back
+
+    Note over Browser, Backend: Phase 3: Playlist Pagination & Session Creation
+    Browser->>Backend: 12. GET /spotify/playlists
+    Backend->>Spotify: 13. Fetches playlists via sliding-window cursor pagination (supports 1,400+ tracks)
+    Backend-->>Browser: 14. Displays playlists with track counts & cover art
+    Dev->>Browser: 15. Selects playlist and clicks "Download on My PC"
+    Browser->>Backend: 16. POST /spotify/playlist/session
+    Backend-->>Browser: 17. Returns unique 4-digit code (e.g. TF-4847)
+
+    Note over CLI, Disk: Phase 4: High-Fidelity Audio Extraction Pipeline
+    Dev->>CLI: 18. Runs: tunefetch TF-4847 in ANY terminal
+    CLI->>Backend: 19. Resolves TF-4847 from localhost:8000 (or cloud fallback)
+    Backend-->>CLI: 20. Returns playlist tracklist metadata
+    loop For Every Track in Playlist
+        CLI->>DB: 21. Check resolved_songs cache for (Song Name + Artist)
+        alt Cache Hit (< 5ms)
+            DB-->>CLI: 22a. Reuses cached YouTube stream URL instantly
+        else Cache Miss
+            CLI->>Serper: 22b. Queries: site:youtube.com/watch "Song" "Artist"
+            Serper-->>CLI: 23b. Returns top verified YouTube candidate URL
+            CLI->>DB: 24b. Caches resolved stream into DB for future reuse
+        end
+        CLI->>CLI: 25. Downloads high-bitrate audio stream in parallel with live progress
+        CLI->>CLI: 26. Transcodes to 320 kbps CBR MP3 via embedded imageio-ffmpeg
+        CLI->>CLI: 27. Injects Spotify ID3 tags & embeds high-res cover art
+        CLI->>Disk: 28. Saves to Downloads/Thanks for downloading/<Playlist>/
+    end
+    CLI-->>Dev: 29. [✓] All tracks saved and ready to play!
 ```
 
-1. **Connect Spotify**: Click **Connect Spotify** to browse your public, private, and collaborative playlists via secure OAuth 2.0 PKCE.
-2. **Generate Session Code**: Click **"Download on My PC"** on any playlist to get a temporary session code (e.g. `TF-4847`).
-3. **Execute in Terminal**: Open your terminal (PowerShell, Command Prompt, or bash) and run:
-   ```bash
-   tunefetch TF-4847
-   ```
-4. **Local or Cloud**: The CLI automatically checks both your local running server (`http://127.0.0.1:8000`) and the cloud API.
-5. **Real-Time Download**: Songs are downloaded in parallel with real-time transfer speeds and live progress bars.
+---
+
+### 🧩 Detailed Breakdown of Each Step
+
+#### 1. Setup & Multi-Env Auto-Detection
+- When you clone the repository and run `cp .env.example .env`, the configuration system in [`config.py`](file:///c:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/app/core/config.py) automatically checks for `.env` at the **repository root** and inside `backend/`.
+- If you leave `DATABASE_URL` commented out, SQLAlchemy automatically creates a local SQLite file (`tunefetch_dev.db`) on first run — **meaning zero database setup is needed to start developing**.
+
+#### 2. Spotify OAuth 2.0 with PKCE Security
+- No Spotify passwords or permanent raw secrets are ever exposed to the frontend.
+- TuneFetch implements **Proof Key for Code Exchange (PKCE)** using high-entropy 64-byte random verifiers and SHA-256 challenges.
+- Tokens received from Spotify are **Fernet-encrypted at rest** before touching PostgreSQL or SQLite.
+- Session identity is secured via cryptographically signed HTTP-only cookies (`tunefetch_session`).
+
+#### 3. Large Playlist Pagination Engine
+- Standard Spotify API calls cap at 50 or 100 tracks.
+- TuneFetch features an asynchronous sliding-window cursor pagination loop in [`spotify_service.py`](file:///c:/Users/KIIT/Desktop/Spotify-Playlist-Downloader/backend/app/services/spotify_service.py) that seamlessly traverses and normalizes playlists with **10, 100, 500, or 1,400+ tracks** without memory leaks or request timeouts.
+
+#### 4. The Session Code Bridge (`TF-XXXX`)
+- Downloading 500 high-bitrate MP3s through a browser tab can freeze the browser, trigger memory limits, or fail on background tab throttling.
+- Instead, clicking **"Download on My PC"** creates a lightweight temporary session code (e.g. `TF-4847`) that packages the playlist's metadata.
+- This acts as an instantaneous bridge between the web dashboard and your native operating system terminal.
+
+#### 5. Song Resolution & Persistent Database Cache
+- When the CLI runs, it checks whether the song and artist pair has already been discovered in the `resolved_songs` table:
+  - **Cache Hit**: Resolves in **`< 5ms`**, bypassing external search completely.
+  - **Cache Miss**: Constructs an exact Google search query via the Serper API (`site:youtube.com/watch "Song Name" "Artist Name"`), extracts the best audio stream, and saves it into the database so anyone downloading that track in the future gets it instantly.
+
+#### 6. Audio Transcoding & High-Fidelity Tagging
+- **Zero FFmpeg Setup**: Audio transcoding uses `imageio-ffmpeg` to embed the necessary conversion binaries directly — users don't have to manually download, extract, or add `ffmpeg.exe` to their system PATH.
+- Streams are transcoded into **pristine 320 kbps Constant Bitrate (CBR) MP3**.
+- High-resolution album artwork from Spotify is downloaded and embedded directly into the MP3's ID3 metadata tags (APIC frame) along with Title, Artist, Album, and Track number.
+- Files are saved directly to `Downloads/Thanks for downloading/<Playlist Name>/` — no ZIP extraction necessary.
+
 
 ---
 

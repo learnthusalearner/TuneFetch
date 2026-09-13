@@ -1,4 +1,5 @@
 import React from 'react';
+import GithubIcon from '../ui/GithubIcon';
 
 /**
  * LandingFooter
@@ -20,7 +21,30 @@ export default function LandingFooter({ onPrivacy }) {
           </span>
         ))}
       </div>
-      <div style={{ marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 18, marginTop: 14, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <a
+          href="https://github.com/learnthusalearner/TuneFetch"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            color: 'rgba(255,255,255,0.65)',
+            fontSize: 12,
+            fontWeight: 500,
+            textDecoration: 'none',
+            transition: 'color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.65)'}
+          title="View TuneFetch Source Code on GitHub"
+        >
+          <GithubIcon size={14} />
+          <span>Star on GitHub</span>
+        </a>
+
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>•</span>
         <button
           onClick={onPrivacy}
           style={{
@@ -36,6 +60,7 @@ export default function LandingFooter({ onPrivacy }) {
           🛡️ Privacy Policy &amp; Security Guarantee
         </button>
       </div>
+
     </footer>
   );
 }

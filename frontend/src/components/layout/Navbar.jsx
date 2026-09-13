@@ -1,7 +1,10 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Music, Home, LogOut, Download } from 'lucide-react';
+import GithubIcon from '../ui/GithubIcon';
 import { api } from '../../services/api';
+
+
 
 /**
  * Navbar — top bar used inside DashboardPage.
@@ -49,6 +52,20 @@ export default function Navbar({ spotifyUser, onGoHome, onLogout }) {
             <span>Landing Page</span>
           </button>
         )}
+
+        {/* GitHub link */}
+        <a
+          href="https://github.com/learnthusalearner/TuneFetch"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="icon-btn"
+          title="Star and view source on GitHub"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <GithubIcon size={16} />
+          <span>GitHub</span>
+        </a>
+
 
 
         {/* Spotify user avatar & Switch/Logout button */}
