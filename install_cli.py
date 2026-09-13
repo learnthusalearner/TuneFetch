@@ -87,7 +87,7 @@ def main():
     print("    tunefetch TF-4847")
     print()
     print(f"Downloaded MP3s are saved directly to:")
-    print(f"  {Path.home() / 'Downloads' / 'Thanks for downloading'}")
+    print("  Downloads/Thanks for downloading")
     print("=" * 65)
     print()
 

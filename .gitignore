@@ -42,7 +42,7 @@ Thumbs.db
 .idea/
 .gemini/
 
-# Executables (TuneFetch CLI engine built dynamically; installer wizard committed)
+# Executables & scratch
 *.exe
-!backend/static/TuneFetch_Setup.exe
+scratch/
 

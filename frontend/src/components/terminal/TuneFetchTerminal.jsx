@@ -9,7 +9,7 @@ export default function TuneFetchTerminal({
   sessionCode = 'TF-8429',
   playlistName = 'Late Night Lo-Fi Chillout',
   trackCount = 24,
-  destinationPath = 'C:\\Users\\Windows\\Downloads\\Late Night Lo-Fi Chillout',
+  destinationPath = 'Downloads/Thanks for downloading/Late Night Lo-Fi Chillout',
   tracks = null,
   showControls = true,
   className = ''
@@ -102,7 +102,7 @@ export default function TuneFetchTerminal({
       >
         {/* Prompt Line */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <span style={{ color: '#38bdf8', fontWeight: 700 }}>PS C:\Users\User&gt;</span>
+          <span style={{ color: '#38bdf8', fontWeight: 700 }}>$</span>
           <span style={{ color: '#10b981', fontWeight: 700, fontSize: '14.5px' }}>
             {commandText}
           </span>

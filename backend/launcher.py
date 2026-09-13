@@ -47,7 +47,7 @@ os.environ["DOWNLOADS_DIR"] = str(USER_DOWNLOADS)
 def print_banner():
     print()
     print("=" * 60)
-    print(f"           {APP_NAME} Desktop Engine v{APP_VERSION}")
+    print(f"             {APP_NAME} CLI Engine v{APP_VERSION}")
     print("   Spotify Playlist & High-Fidelity Audio Downloader")
     print("=" * 60)
     print()
@@ -64,7 +64,7 @@ def print_help():
     print("  tunefetch TF-8429")
     print("  tunefetch 8429")
     print()
-    print(f"[+] Download Location: {USER_DOWNLOADS}")
+    print("[+] Download Location: Downloads/Thanks for downloading")
     print("=" * 70)
     print()
 
@@ -137,7 +137,7 @@ def run_cli_mode(code: str):
 
     playlist_folder = USER_DOWNLOADS / playlist_name
     print(f"[✓] Session Verified: \"{playlist_name}\" ({len(tracks)} Tracks Verified)")
-    print(f"[+] Destination Folder: {playlist_folder}")
+    print(f"[+] Destination Folder: Downloads/Thanks for downloading/{playlist_name}")
     print()
 
     # Enable UTF-8 on Windows terminal if supported
@@ -236,7 +236,7 @@ def run_cli_mode(code: str):
             sys.stdout.write("\r\033[K\n")
             print()
             print(f"[✓] {completed} of {total} tracks converted successfully at 320 kbps!")
-            print(f"Total Time: {elapsed_m:02d}:{elapsed_s:02d} · Destination: {playlist_folder}")
+            print(f"Total Time: {elapsed_m:02d}:{elapsed_s:02d} · Destination: Downloads/Thanks for downloading/{playlist_folder.name}")
             print()
             break
 
